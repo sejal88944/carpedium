@@ -1,0 +1,96 @@
+export const COMPANY = {
+  name: 'AASHA-SM TECHNOLOGIES PRIVATE LIMITED',
+  shortName: 'AASHA-SM TECH',
+  email: 'adminsmtechsolution@gmail.com',
+  phone: '+91 9529998320',
+  phoneTel: '919529998320',
+  whatsapp: '919529998320',
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || 'https://aashasmtech.com',
+  tagline: 'Premium Custom T-Shirt Printing & Branding',
+  description:
+    'Professional custom T-shirt printing for businesses, startups, colleges, teams, events, and personal brands across Pune, Mumbai, Hyderabad, Bangalore, Nagpur and Nashik.',
+  hours: 'Mon–Sat: 9:00 AM – 8:00 PM',
+  rating: 4.9,
+  reviewCount: 128,
+  locations: ['Pune', 'Mumbai', 'Nagpur', 'Nashik', 'Hyderabad', 'Bangalore'],
+} as const
+
+export const TEE_COLORS = [
+  { id: 'black', name: 'Black', hex: '#0a0a0a', text: 'Classic Black', textColor: '#ffffff' },
+  { id: 'white', name: 'White', hex: '#f8fafc', text: 'MINIMAL STYLE', textColor: '#0f172a' },
+  { id: 'navy', name: 'Navy Blue', hex: '#1e3a5f', text: 'CORPORATE WEAR', textColor: '#ffffff' },
+  { id: 'grey', name: 'Grey', hex: '#6b7280', text: 'PREMIUM PRINT', textColor: '#ffffff' },
+  { id: 'olive', name: 'Olive Green', hex: '#4d5d3d', text: 'OUTDOOR STYLE', textColor: '#ffffff' },
+  { id: 'beige', name: 'Beige', hex: '#d4c4a8', text: 'MODERN FIT', textColor: '#1c1917' },
+  { id: 'royal', name: 'Royal Blue', hex: '#1d4ed8', text: 'TEAM POWER', textColor: '#ffffff' },
+  { id: 'red', name: 'Red', hex: '#dc2626', text: 'BOLD BRAND', textColor: '#ffffff' },
+  { id: 'orange', name: 'Orange', hex: '#ea580c', text: 'EVENT CREW', textColor: '#ffffff' },
+  { id: 'pink', name: 'Pink', hex: '#ec4899', text: 'CREATIVE WEAR', textColor: '#ffffff' },
+  { id: 'sky', name: 'Sky Blue', hex: '#38bdf8', text: 'CUSTOM DESIGN', textColor: '#0f172a' },
+  { id: 'green', name: 'Green', hex: '#16a34a', text: 'STARTUP HUB', textColor: '#ffffff' },
+] as const
+
+export type TeeColorId = (typeof TEE_COLORS)[number]['id']
+
+export const CATEGORIES = [
+  {
+    id: 'men',
+    name: 'Men T-Shirts',
+    slug: 'men-t-shirts',
+    image: '/categories/men.png',
+    images: [
+      '/categories/men.png',
+      '/categories/oversized.png',
+      '/categories/polo.png',
+      '/categories/corporate.png',
+      '/categories/startup.png',
+      '/categories/event.png',
+      '/categories/kids.png',
+      '/categories/plain.png',
+      '/categories/women.png',
+      '/categories/couple.png',
+    ],
+    tagline: 'Streetwear · Oversized · Polo · Corporate',
+    surface: '#1f242b',
+  },
+  {
+    id: 'women',
+    name: 'Women T-Shirts',
+    slug: 'women-t-shirts',
+    image: '/categories/women.png',
+    images: ['/categories/women.png'],
+    tagline: 'Soft cotton · feminine cuts',
+    surface: '#efeae3',
+  },
+  {
+    id: 'couple',
+    name: 'Couple T-Shirts',
+    slug: 'couple-t-shirts',
+    image: '/categories/couple.png',
+    images: ['/categories/couple.png'],
+    tagline: 'Match together, shine together',
+    surface: '#f1f1ef',
+  },
+] as const
+
+export const SEO_KEYWORDS = [
+  'custom t shirt printing',
+  't shirt printing near me',
+  'polo t shirt printing',
+  'corporate t shirt printing',
+  'bulk t shirt printing',
+  'custom logo t shirts',
+  'oversized t shirts India',
+  'startup branding t shirts',
+  'event t shirt printing',
+  'promotional t shirts',
+  'printed polo t shirts',
+  'company uniform t shirts',
+  'custom tshirts Pune',
+  'tshirt manufacturer India',
+  'plain t shirts wholesale',
+  'best tshirt printing company',
+  'custom tshirt printing Pune',
+  'polo tshirt manufacturer',
+  'bulk tshirt supplier',
+] as const

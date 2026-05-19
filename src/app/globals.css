@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #fafafa;
+  --fg: #0f172a;
+  --card: rgba(255, 255, 255, 0.72);
+}
+
+.dark {
+  --bg: #0a0a0b;
+  --fg: #f8fafc;
+  --card: rgba(24, 24, 28, 0.72);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-[var(--bg)] text-[var(--fg)] font-body antialiased;
+}
+
+.glass {
+  @apply border border-black/5 bg-[var(--card)] backdrop-blur-xl dark:border-white/10;
+}
+
+.glass-hover {
+  @apply transition hover:border-brand/30 hover:shadow-glow;
+}
+
+.text-gradient {
+  @apply bg-gradient-to-r from-brand to-brand-gold bg-clip-text text-transparent;
+}
