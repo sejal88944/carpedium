@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "cross-env NEXT_DIST_DIR=.next-dev npx next dev",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 npx next build",
+    "build:vercel": "cross-env NODE_OPTIONS=--max-old-space-size=3072 SKIP_TS_CHECK=1 NEXT_DISABLE_ESLINT=1 npx next build --no-lint",
     "build:lite": "cross-env NODE_OPTIONS=--max-old-space-size=4096 SKIP_TS_CHECK=1 NEXT_DISABLE_ESLINT=1 npx next build --no-lint",
     "start": "npx next start",
     "lint": "next lint",
