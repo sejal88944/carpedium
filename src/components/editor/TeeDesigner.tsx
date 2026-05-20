@@ -857,15 +857,40 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       /* ignore */
     }
 
+    const canvas = fabricRef.current
+    const activeSide = sideRef.current
+
+    // Put typed text / emoji on canvas before export so PDF page 2 matches the design.
+    if (canvas && text.trim()) {
+      const hasTextOnSide = canvas
+        .getObjects()
+        .some(
+          (o) =>
+            (o as UserObject).meta === 'user-text' &&
+            (!(o as UserObject).printSide || (o as UserObject).printSide === activeSide),
+        )
+      if (!hasTextOnSide) {
+        addTextDesign(
+          text,
+          {
+            fontFamily: font,
+            fontWeight,
+            fontSize,
+            fill: textColor,
+            angle: rotation,
+          },
+          false,
+        )
+      }
+    }
+
     const thumb = exportThumbnail()
     const hires = exportPreview()
-    const activeSide = sideRef.current
     const { print } = teeZone(activeSide)
     const orderId = `ORD-${Date.now().toString(36).toUpperCase()}`
     const orderDate = new Date().toISOString()
 
     let artworkExport: Awaited<ReturnType<typeof exportArtworkFromFabric>> = null
-    const canvas = fabricRef.current
     if (canvas) {
       try {
         artworkExport = await exportArtworkFromFabric(canvas, {
@@ -882,7 +907,13 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     }
 
     const printArtwork =
-      artworkExport?.transparentPng?.startsWith('data:') ? artworkExport.transparentPng : ''
+      artworkExport?.printSheetPng?.startsWith('data:')
+        ? artworkExport.printSheetPng
+        : artworkExport?.flatPrintPng?.startsWith('data:')
+          ? artworkExport.flatPrintPng
+          : artworkExport?.transparentPng?.startsWith('data:')
+            ? artworkExport.transparentPng
+            : ''
     const printCrop = printArtwork
     const unitPrice = BASE_PRICE + PRINT_CHARGE
     const item = {
@@ -904,6 +935,20 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     // attach in WhatsApp. wa.me deep links cannot attach files themselves.
     let pdfFileName: string | undefined
     let pdfDataUrl: string | undefined
+    if (!printArtwork.startsWith('data:')) {
+      alert(
+        'Please add your design on the T-shirt first — upload a logo, add text, or place an emoji — then Add to cart.',
+      )
+      if (printTab) {
+        try {
+          printTab.close()
+        } catch {
+          /* ignore */
+        }
+      }
+      return
+    }
+
     if (printArtwork.startsWith('data:')) {
       try {
         const result = downloadDesignPdf(
@@ -976,7 +1021,10 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           customerEmail: customerEmail.trim() || undefined,
           pdfUrl: pdfDataUrl,
           pdfFileName,
-          printArtworkUrl: printArtwork || undefined,
+          printArtworkUrl:
+            artworkExport?.transparentPng?.startsWith('data:')
+              ? artworkExport.transparentPng
+              : printArtwork || undefined,
           mockupPreviewUrl: hires.startsWith('data:') ? hires : undefined,
           designJson: artworkExport
             ? JSON.stringify(artworkExport.designJson)
@@ -1002,7 +1050,10 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             customerPhone: customerPhone.trim(),
             customerEmail: customerEmail.trim() || undefined,
             pdfFileName,
-            printArtworkUrl: printArtwork || undefined,
+            printArtworkUrl:
+            artworkExport?.transparentPng?.startsWith('data:')
+              ? artworkExport.transparentPng
+              : printArtwork || undefined,
             orderId,
             color: color.name,
             size: item.size,

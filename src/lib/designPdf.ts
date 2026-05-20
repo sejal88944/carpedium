@@ -192,7 +192,7 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
   pdf.text('PRINT READY DESIGN', margin, 13)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8)
-  pdf.text('Artwork layer only — send to printing machine', pageW - margin, 13, { align: 'right' })
+  pdf.text('Text · emoji · logo — exact design from cart', pageW - margin, 13, { align: 'right' })
 
   const footerH = 28
   const artTop = 26
@@ -216,18 +216,8 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
   const ix = (pageW - dw) / 2
   const iy = artTop + (artMaxH - dh) / 2
 
-  // Light checker hint (transparency guide)
-  const cell = 4
-  pdf.setFillColor(248, 250, 252)
+  pdf.setFillColor(255, 255, 255)
   pdf.rect(ix - 2, iy - 2, dw + 4, dh + 4, 'F')
-  for (let cx = ix; cx < ix + dw; cx += cell) {
-    for (let cy = iy; cy < iy + dh; cy += cell) {
-      if (((Math.floor((cx - ix) / cell) + Math.floor((cy - iy) / cell)) % 2) === 0) {
-        pdf.setFillColor(241, 245, 249)
-        pdf.rect(cx, cy, cell, cell, 'F')
-      }
-    }
-  }
 
   pdf.setDrawColor(148, 163, 184)
   pdf.setLineWidth(0.5)

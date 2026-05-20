@@ -13,16 +13,19 @@ export type DesignLayerJson = {
 }
 
 export type ArtworkExportResult = {
-  /** Transparent PNG — user artwork only (no mockup). */
+  /** Transparent PNG — artwork only. */
   transparentPng: string
-  /** Same region with tee tint behind artwork (PDF / preview). */
+  /** Tee-colour fill behind artwork (same crop). */
   flatPrintPng: string
+  /** White background — clearest for PDF page 2 & office printers. */
+  printSheetPng: string
   widthPx: number
   heightPx: number
   printWidthMm: number
   printHeightMm: number
   aspectRatio: number
   designJson: DesignLayerJson
+  hasArtwork: boolean
 }
 
 const CHEST_PRINT_WIDTH_MM = 300
@@ -31,6 +34,13 @@ type UserObj = FabricObject & { meta?: string; printSide?: 'front' | 'back' }
 
 function isHelper(meta?: string) {
   return meta === '__tee' || meta === '__grid' || meta === 'label'
+}
+
+function isUserDesignObject(o: FabricObject, activeSide: 'front' | 'back') {
+  const meta = (o as UserObj).meta
+  if (isHelper(meta)) return false
+  const ps = (o as UserObj).printSide
+  return !ps || ps === activeSide
 }
 
 function cropDataUrl(
@@ -68,9 +78,84 @@ function cropDataUrl(
   })
 }
 
+/** Crop to pixels that have visible ink — design fills page 2 larger & clearer. */
+function trimToContentBounds(dataUrl: string, paddingPx = 12): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth || img.width
+        const h = img.naturalHeight || img.height
+        const c = document.createElement('canvas')
+        c.width = w
+        c.height = h
+        const ctx = c.getContext('2d', { willReadFrequently: true })
+        if (!ctx) return resolve(dataUrl)
+        ctx.drawImage(img, 0, 0)
+        const { data } = ctx.getImageData(0, 0, w, h)
+        let minX = w
+        let minY = h
+        let maxX = 0
+        let maxY = 0
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const a = data[(y * w + x) * 4 + 3]
+            if (a > 12) {
+              if (x < minX) minX = x
+              if (y < minY) minY = y
+              if (x > maxX) maxX = x
+              if (y > maxY) maxY = y
+            }
+          }
+        }
+        if (maxX <= minX || maxY <= minY) return resolve(dataUrl)
+        const pad = paddingPx
+        minX = Math.max(0, minX - pad)
+        minY = Math.max(0, minY - pad)
+        maxX = Math.min(w - 1, maxX + pad)
+        maxY = Math.min(h - 1, maxY + pad)
+        const tw = maxX - minX + 1
+        const th = maxY - minY + 1
+        const out = document.createElement('canvas')
+        out.width = tw
+        out.height = th
+        const octx = out.getContext('2d')
+        if (!octx) return resolve(dataUrl)
+        octx.drawImage(c, minX, minY, tw, th, 0, 0, tw, th)
+        resolve(out.toDataURL('image/png'))
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
+function compositeOnBackground(pngDataUrl: string, bgHex: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const w = img.naturalWidth || img.width
+      const h = img.naturalHeight || img.height
+      const c = document.createElement('canvas')
+      c.width = w
+      c.height = h
+      const ctx = c.getContext('2d')
+      if (!ctx) return resolve(pngDataUrl)
+      ctx.fillStyle = bgHex
+      ctx.fillRect(0, 0, w, h)
+      ctx.drawImage(img, 0, 0)
+      resolve(c.toDataURL('image/png'))
+    }
+    img.onerror = () => resolve(pngDataUrl)
+    img.src = pngDataUrl
+  })
+}
+
 /**
- * Export only the customer's design layer from Fabric (logo + text combined as placed).
- * Uses transparent background for print-shop extraction.
+ * Export logo + text + emoji exactly as placed on the tee (no mockup).
+ * Resets blend modes so PDF/PNG match what the user sees.
  */
 export async function exportArtworkFromFabric(
   canvas: Canvas,
@@ -86,20 +171,34 @@ export async function exportArtworkFromFabric(
   if (typeof document === 'undefined') return null
 
   const m = opts.multiplier ?? 4
-  const snapshot: Array<{ o: FabricObject; vis: boolean }> = []
+  const visSnap: Array<{ o: FabricObject; vis: boolean }> = []
+  const blendSnap: Array<{
+    o: FabricObject
+    gco: GlobalCompositeOperation
+    opacity: number
+  }> = []
+
+  const userOnSide = canvas.getObjects().filter((o) => isUserDesignObject(o, opts.activeSide))
+  const hasArtwork = userOnSide.length > 0
 
   canvas.getObjects().forEach((o) => {
     const meta = (o as UserObj).meta
     if (isHelper(meta)) {
-      snapshot.push({ o, vis: o.visible })
+      visSnap.push({ o, vis: o.visible })
       o.set('visible', false)
       return
     }
-    const ps = (o as UserObj).printSide
-    if (ps && ps !== opts.activeSide) {
-      snapshot.push({ o, vis: o.visible })
+    if (!isUserDesignObject(o, opts.activeSide)) {
+      visSnap.push({ o, vis: o.visible })
       o.set('visible', false)
+      return
     }
+    blendSnap.push({
+      o,
+      gco: (o.globalCompositeOperation as GlobalCompositeOperation) || 'source-over',
+      opacity: typeof o.opacity === 'number' ? o.opacity : 1,
+    })
+    o.set({ globalCompositeOperation: 'source-over', opacity: 1 })
   })
 
   const prevBg = canvas.backgroundColor ?? 'transparent'
@@ -114,7 +213,7 @@ export async function exportArtworkFromFabric(
   }
 
   let flatFull = transparentFull
-  if (opts.teeColorHex) {
+  if (opts.teeColorHex && transparentFull.startsWith('data:')) {
     canvas.backgroundColor = opts.teeColorHex
     canvas.requestRenderAll()
     try {
@@ -124,30 +223,37 @@ export async function exportArtworkFromFabric(
     }
   }
 
-  snapshot.forEach(({ o, vis }) => o.set('visible', vis))
+  blendSnap.forEach(({ o, gco, opacity }) => o.set({ globalCompositeOperation: gco, opacity }))
+  visSnap.forEach(({ o, vis }) => o.set('visible', vis))
   canvas.backgroundColor = prevBg
   canvas.requestRenderAll()
 
-  if (!transparentFull.startsWith('data:')) return null
+  if (!transparentFull.startsWith('data:') || !hasArtwork) return null
 
-  const transparent = await cropDataUrl(transparentFull, opts.printRegion, m)
-  const flat = flatFull.startsWith('data:')
+  const transparentCrop = await cropDataUrl(transparentFull, opts.printRegion, m)
+  const flatCrop = flatFull.startsWith('data:')
     ? await cropDataUrl(flatFull, opts.printRegion, m)
-    : transparent
+    : transparentCrop
+
+  let transparentPng = await trimToContentBounds(transparentCrop.dataUrl, 16)
+  const flatPrintPng = await trimToContentBounds(flatCrop.dataUrl, 16)
+  const printSheetPng = await compositeOnBackground(transparentPng, '#ffffff')
+
+  const trimmedImg = await new Promise<HTMLImageElement>((res) => {
+    const im = new Image()
+    im.onload = () => res(im)
+    im.onerror = () => res(new Image())
+    im.src = transparentPng
+  })
+  const tw = trimmedImg.naturalWidth || transparentCrop.widthPx
+  const th = trimmedImg.naturalHeight || transparentCrop.heightPx
 
   const mmPerPx = CHEST_PRINT_WIDTH_MM / opts.printRegion.width
   const printWidthMm = Math.round(opts.printRegion.width * mmPerPx)
   const printHeightMm = Math.round(opts.printRegion.height * mmPerPx)
 
-  const userObjects = canvas.getObjects().filter((o) => {
-    const meta = (o as UserObj).meta
-    if (isHelper(meta)) return false
-    const ps = (o as UserObj).printSide
-    return !ps || ps === opts.activeSide
-  })
-
   const objects: Array<Record<string, unknown>> = []
-  for (const o of userObjects) {
+  for (const o of userOnSide) {
     try {
       objects.push(
         typeof o.toObject === 'function'
@@ -170,14 +276,16 @@ export async function exportArtworkFromFabric(
   }
 
   return {
-    transparentPng: transparent.dataUrl,
-    flatPrintPng: flat.dataUrl,
-    widthPx: transparent.widthPx,
-    heightPx: transparent.heightPx,
+    transparentPng,
+    flatPrintPng,
+    printSheetPng,
+    widthPx: tw,
+    heightPx: th,
     printWidthMm,
     printHeightMm,
-    aspectRatio: opts.printRegion.width / opts.printRegion.height,
+    aspectRatio: tw / Math.max(1, th),
     designJson,
+    hasArtwork: true,
   }
 }
 

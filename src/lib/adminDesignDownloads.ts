@@ -9,7 +9,7 @@ export function downloadInvoicePdf(upload: AdminUpload) {
 }
 
 export function downloadPrintDesignPng(upload: AdminUpload) {
-  const src = upload.printArtworkUrl || upload.url
+  const src = upload.printArtworkUrl || upload.mockupPreviewUrl || upload.url
   if (!src?.startsWith('data:')) return false
   const safe =
     (upload.orderId || upload.label)
