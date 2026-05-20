@@ -17,7 +17,7 @@ export const COMPANY = {
 
 export const TEE_COLORS = [
   { id: 'black', name: 'Black', hex: '#0a0a0a', text: 'Classic Black', textColor: '#ffffff' },
-  { id: 'white', name: 'White', hex: '#f8fafc', text: 'MINIMAL STYLE', textColor: '#0f172a' },
+  { id: 'white', name: 'White', hex: '#ffffff', text: 'MINIMAL STYLE', textColor: '#0f172a' },
   { id: 'navy', name: 'Navy Blue', hex: '#1e3a5f', text: 'CORPORATE WEAR', textColor: '#ffffff' },
   { id: 'grey', name: 'Grey', hex: '#6b7280', text: 'PREMIUM PRINT', textColor: '#ffffff' },
   { id: 'olive', name: 'Olive Green', hex: '#4d5d3d', text: 'OUTDOOR STYLE', textColor: '#ffffff' },

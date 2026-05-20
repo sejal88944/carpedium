@@ -22,6 +22,12 @@ function hexToRgb(hex: string) {
   }
 }
 
+/** Near-white target colours: default tint makes folds look muddy grey — lift shadow floor. */
+function isNearWhiteTeeHex(hex: string) {
+  const { r, g, b } = hexToRgb(hex)
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 >= 0.92
+}
+
 export function loadTeeBaseImage(): Promise<HTMLImageElement> {
   if (baseImage) return Promise.resolve(baseImage)
   return new Promise((resolve, reject) => {
@@ -90,7 +96,12 @@ export async function tintTeeMockup(hex: string, side: 'front' | 'back' = 'front
     }
 
     const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    const shade = Math.pow(Math.min(1, lum * lift), 0.88)
+    let shade = Math.pow(Math.min(1, lum * lift), 0.88)
+    if (isNearWhiteTeeHex(hex)) {
+      const hi = Math.pow(Math.min(1, lum * lift), 0.92)
+      const shadowFloor = 0.78
+      shade = shadowFloor + (1 - shadowFloor) * hi
+    }
     data[i] = Math.min(255, Math.round(tr * shade))
     data[i + 1] = Math.min(255, Math.round(tg * shade))
     data[i + 2] = Math.min(255, Math.round(tb * shade))

@@ -208,6 +208,18 @@ function fabricBlendForColor(hex: string): GlobalCompositeOperation {
   return 'source-over'
 }
 
+/** Re-apply logo blend when tee colour changes (initial blend is only set at upload time). */
+function syncPrintImagesToTeeColor(canvas: Canvas, teeHex: string) {
+  const blend = fabricBlendForColor(teeHex)
+  const opacity = isDarkColor(teeHex) ? 0.92 : 0.96
+  canvas.getObjects().forEach((o) => {
+    if ((o as UserObject).meta !== 'print' && (o as UserObject).meta !== 'print-underbase') return
+    if (!(o instanceof FabricImage)) return
+    o.set({ globalCompositeOperation: blend, opacity })
+    o.dirty = true
+  })
+}
+
 function syncDesignsForSide(canvas: Canvas, activeSide: 'front' | 'back') {
   canvas.getObjects().forEach((o) => {
     if (isHelper(o)) return
@@ -522,6 +534,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
 
   // One-time fetch + persist of customer contact details so returning users
   // don't have to re-type their name / phone / email each time.
@@ -530,10 +543,16 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     try {
       const raw = window.localStorage.getItem('aasha-customer')
       if (raw) {
-        const data = JSON.parse(raw) as { name?: string; phone?: string; email?: string }
+        const data = JSON.parse(raw) as {
+          name?: string
+          phone?: string
+          email?: string
+          address?: string
+        }
         if (data.name) setCustomerName(data.name)
         if (data.phone) setCustomerPhone(data.phone)
         if (data.email) setCustomerEmail(data.email)
+        if (data.address) setCustomerAddress(data.address)
       }
     } catch {
       /* ignore */
@@ -545,14 +564,20 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     try {
       window.localStorage.setItem(
         'aasha-customer',
-        JSON.stringify({ name: customerName, phone: customerPhone, email: customerEmail }),
+        JSON.stringify({
+          name: customerName,
+          phone: customerPhone,
+          email: customerEmail,
+          address: customerAddress,
+        }),
       )
     } catch {
       /* ignore */
     }
   }
 
-  const color = TEE_COLORS.find((c) => c.id === colorId) ?? TEE_COLORS[0]
+  const color =
+    DESIGNER_TEE_COLORS.find((c) => c.id === colorId) ?? DESIGNER_TEE_COLORS[0] ?? TEE_COLORS[0]
   const total = (BASE_PRICE + PRINT_CHARGE) * quantity
   const textCategory = detectTextCategory(text)
   const textSuggestions = generateTextSuggestions(text)
@@ -628,6 +653,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       if (!canvas) return
       await drawTee(canvas, targetHex, activeSide)
       if (cancelled) return
+      syncPrintImagesToTeeColor(canvas, targetHex)
       syncDesignsForSide(canvas, activeSide)
       canvas.renderAll()
       syncPreview()
@@ -810,6 +836,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
         name: customerName.trim(),
         email: customerEmail.trim(),
         phone: customerPhone.trim(),
+        address: customerAddress.trim() || undefined,
       })
     } catch {
       /* ignore */
@@ -849,6 +876,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           customerEmail: customerEmail.trim() || undefined,
+          customerAddress: customerAddress.trim() || undefined,
         })
         pdfFileName = result.fileName
         pdfDataUrl = result.dataUrl
@@ -856,6 +884,13 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
         console.error('pdf export failed', err)
       }
     }
+
+    const designerNotes = [
+      text.trim() ? `Text: ${text.trim()}` : '',
+      customerAddress.trim() ? `Address: ${customerAddress.trim()}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n') || undefined
 
     if (hires && hires.startsWith('data:')) {
       try {
@@ -873,7 +908,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           size: item.size,
           quantity: item.qty,
           price: item.price,
-          notes: text ? `Text: ${text}` : undefined,
+          notes: designerNotes,
         })
       } catch (err) {
         console.error('admin upload failed', err)
@@ -892,6 +927,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             size: item.size,
             quantity: item.qty,
             price: item.price,
+            notes: designerNotes,
           })
         } catch {
           /* ignore */
@@ -1331,7 +1367,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                 Your details
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                Tumcha naav ani phone — order confirm krayla lagto.
+                Tumcha naav ani phone — order confirm krayla lagto. Delivery patta tarihi tachya khali
+                — optional (WhatsApp ani PDF madhe yayel).
               </p>
               <div className="mt-3 space-y-2">
                 <input
@@ -1357,6 +1394,14 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                   type="email"
                   placeholder="Email (optional)"
                   className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none ring-brand/30 focus:ring-4 dark:border-white/10 dark:bg-void-3"
+                />
+                <textarea
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  onBlur={persistCustomer}
+                  placeholder="Delivery address (optional)"
+                  rows={3}
+                  className="w-full resize-y rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none ring-brand/30 focus:ring-4 dark:border-white/10 dark:bg-void-3"
                 />
               </div>
             </section>

@@ -11,6 +11,7 @@ export type DesignPdfMeta = {
   customerName?: string
   customerPhone?: string
   customerEmail?: string
+  customerAddress?: string
 }
 
 /**
@@ -90,23 +91,40 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
     pdf.text(r[1], 50, y)
   })
 
-  const customerRows: Array<[string, string]> = [
+  let customerCy = metaY + 8
+  const custLabelX = pageW / 2 + 4
+  const custValueX = pageW / 2 + 26
+  const custValueMaxW = pageW / 2 - 42
+  const simpleRows: Array<[string, string]> = [
     ['Name', meta.customerName || '—'],
     ['Phone', meta.customerPhone || '—'],
     ['Email', meta.customerEmail || '—'],
   ]
-  customerRows.forEach((r, i) => {
-    const y = metaY + 8 + i * 7
+  simpleRows.forEach((r) => {
     pdf.setTextColor(100, 116, 139)
-    pdf.text(r[0], pageW / 2 + 4, y)
+    pdf.text(r[0], custLabelX, customerCy)
     pdf.setTextColor(15, 23, 42)
-    pdf.text(r[1], pageW / 2 + 26, y, { maxWidth: pageW / 2 - 40 })
+    pdf.text(r[1], custValueX, customerCy, { maxWidth: custValueMaxW })
+    customerCy += 7
   })
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('Address', custLabelX, customerCy)
+  pdf.setTextColor(15, 23, 42)
+  const addrVal = meta.customerAddress?.trim() || '—'
+  const addrLines =
+    addrVal === '—' ? ['—'] : pdf.splitTextToSize(addrVal, custValueMaxW)
+  addrLines.forEach((line, li) => {
+    pdf.text(line, custValueX, customerCy + li * 5)
+  })
+  customerCy += Math.max(7, addrLines.length * 5)
+
+  const leftColBottom = metaY + 8 + rows.length * 7
+  const metaNotesY = Math.max(leftColBottom, customerCy) + 6
 
   if (meta.notes) {
     pdf.setTextColor(100, 116, 139)
     pdf.setFontSize(9)
-    pdf.text(`Notes: ${meta.notes}`, 18, metaY + 8 + rows.length * 7 + 4, { maxWidth: pageW - 36 })
+    pdf.text(`Notes: ${meta.notes}`, 18, metaNotesY, { maxWidth: pageW - 36 })
   }
 
   // Footer
