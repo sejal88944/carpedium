@@ -168,34 +168,112 @@ function isLightFill(fill: unknown): boolean {
 }
 
 function splitTrailingEmoji(text: string): { body: string; emoji: string } {
-  const m = text.match(/^([\s\S]*?)(\p{Extended_Pictographic}+)$/u)
-  if (m && m[1].trim().length > 0) return { body: m[1].trimEnd(), emoji: m[2] }
+  try {
+    const m = text.match(/^([\s\S]*?)(\p{Extended_Pictographic}+)$/u)
+    if (m && m[1].trim().length > 0) return { body: m[1].trimEnd(), emoji: m[2] }
+  } catch {
+    /* older engines */
+  }
   return { body: text, emoji: '' }
 }
 
-function cropPieceFromFull(
-  fullImg: HTMLImageElement,
+function getObjectText(o: FabricObject): string {
+  if ('text' in o && typeof (o as { text?: string }).text === 'string') {
+    return (o as { text: string }).text
+  }
+  if (typeof o.get === 'function') {
+    const t = o.get('text')
+    if (typeof t === 'string') return t
+  }
+  return ''
+}
+
+function objectBounds(o: FabricObject, pad = 12): PrintRegion | null {
+  o.setCoords()
+  const r = o.getBoundingRect(true)
+  if (!r.width || !r.height) return null
+  return {
+    left: r.left - pad,
+    top: r.top - pad,
+    width: r.width + pad * 2,
+    height: r.height + pad * 2,
+  }
+}
+
+/** Export one design object alone — sharp crop, correct for row layout. */
+async function exportIsolatedObjectPng(
+  canvas: Canvas,
+  target: FabricObject,
+  activeSide: 'front' | 'back',
   multiplier: number,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-): Promise<{ img: HTMLImageElement; w: number; h: number } | null> {
-  const sx = Math.round(left * multiplier)
-  const sy = Math.round(top * multiplier)
-  const sw = Math.max(1, Math.round(width * multiplier))
-  const sh = Math.max(1, Math.round(height * multiplier))
-  const piece = document.createElement('canvas')
-  piece.width = sw
-  piece.height = sh
-  const pctx = piece.getContext('2d')
-  if (!pctx) return Promise.resolve(null)
-  pctx.drawImage(fullImg, sx, sy, sw, sh, 0, 0, sw, sh)
-  return loadImage(piece.toDataURL('image/png')).then((loaded) => ({
-    img: loaded,
-    w: loaded.naturalWidth,
-    h: loaded.naturalHeight,
-  }))
+): Promise<string | null> {
+  const visibility: Array<{ o: FabricObject; vis: boolean }> = []
+  canvas.getObjects().forEach((o) => {
+    visibility.push({ o, vis: !!o.visible })
+    const meta = (o as UserObj).meta
+    if (isHelper(meta)) {
+      o.set('visible', false)
+      return
+    }
+    o.set('visible', o === target && isUserDesignObject(o, activeSide))
+  })
+  canvas.requestRenderAll()
+
+  let dataUrl = ''
+  try {
+    dataUrl = canvas.toDataURL({ format: 'png', multiplier })
+  } catch {
+    dataUrl = ''
+  }
+
+  visibility.forEach(({ o, vis }) => o.set('visible', vis))
+
+  if (!dataUrl.startsWith('data:')) return null
+  const region = objectBounds(target, 14)
+  if (!region) return null
+  const cropped = await cropDataUrl(dataUrl, region, multiplier)
+  return cropped.dataUrl.startsWith('data:') ? cropped.dataUrl : null
+}
+
+async function splitIsolatedTextAndEmoji(
+  textDataUrl: string,
+  emoji: string,
+): Promise<Array<{ img: HTMLImageElement; w: number; h: number }>> {
+  const img = await loadImage(textDataUrl)
+  const emojiFrac = Math.min(0.34, 0.12 * emoji.length + 0.14)
+  const splitX = Math.max(1, Math.round(img.naturalWidth * (1 - emojiFrac)))
+  const out: Array<{ img: HTMLImageElement; w: number; h: number }> = []
+
+  const textCanvas = document.createElement('canvas')
+  textCanvas.width = splitX
+  textCanvas.height = img.naturalHeight
+  const tctx = textCanvas.getContext('2d')
+  if (tctx) {
+    tctx.drawImage(img, 0, 0, splitX, img.naturalHeight, 0, 0, splitX, img.naturalHeight)
+    const tImg = await loadImage(textCanvas.toDataURL('image/png'))
+    out.push({ img: tImg, w: tImg.naturalWidth, h: tImg.naturalHeight })
+  }
+
+  const emojiCanvas = document.createElement('canvas')
+  emojiCanvas.width = img.naturalWidth - splitX
+  emojiCanvas.height = img.naturalHeight
+  const ectx = emojiCanvas.getContext('2d')
+  if (ectx && emojiCanvas.width > 0) {
+    ectx.drawImage(
+      img,
+      splitX,
+      0,
+      emojiCanvas.width,
+      img.naturalHeight,
+      0,
+      0,
+      emojiCanvas.width,
+      img.naturalHeight,
+    )
+    const eImg = await loadImage(emojiCanvas.toDataURL('image/png'))
+    out.push({ img: eImg, w: eImg.naturalWidth, h: eImg.naturalHeight })
+  }
+  return out
 }
 
 function sortObjectsForPrintRow(objects: FabricObject[]): FabricObject[] {
@@ -208,9 +286,9 @@ function sortObjectsForPrintRow(objects: FabricObject[]): FabricObject[] {
     else images.push(o)
   }
   const byLeft = (a: FabricObject, b: FabricObject) => {
-    a.setCoords()
-    b.setCoords()
-    return a.getBoundingRect().left - b.getBoundingRect().left
+    const ra = objectBounds(a, 0)
+    const rb = objectBounds(b, 0)
+    return (ra?.left ?? 0) - (rb?.left ?? 0)
   }
   images.sort(byLeft)
   texts.sort(byLeft)
@@ -226,65 +304,78 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   })
 }
 
+/** Scale row banner so width is sharp on PDF page 2. */
+function upscaleRowForPrint(dataUrl: string, minLongEdge = PRINT_EXPORT_MIN_LONG_EDGE): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const iw = img.naturalWidth || img.width
+        const ih = img.naturalHeight || img.height
+        const long = Math.max(iw, ih)
+        if (long >= minLongEdge) return resolve(dataUrl)
+        const scale = minLongEdge / long
+        const w = Math.max(1, Math.round(iw * scale))
+        const h = Math.max(1, Math.round(ih * scale))
+        const c = document.createElement('canvas')
+        c.width = w
+        c.height = h
+        const ctx = c.getContext('2d')
+        if (!ctx) return resolve(dataUrl)
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, w, h)
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(c.toDataURL('image/png'))
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
 /**
- * Page 2 print sheet: image · text · emoji in one horizontal row, vertically centred (like print banner).
+ * Page 2: image · text · emoji — one horizontal row (each object exported separately).
  */
-async function composePrintRowSection(
-  fullDataUrl: string,
+async function composePrintRowFromCanvas(
+  canvas: Canvas,
   objects: FabricObject[],
+  activeSide: 'front' | 'back',
   multiplier: number,
 ): Promise<{ dataUrl: string; widthPx: number; heightPx: number } | null> {
-  if (!fullDataUrl.startsWith('data:') || objects.length === 0) return null
+  if (objects.length === 0) return null
 
-  const fullImg = await loadImage(fullDataUrl)
-  const gap = Math.round(40 * (multiplier / 4))
-  const maxRowH = Math.round(380 * (multiplier / 4))
-  const pad = Math.round(40 * (multiplier / 4))
+  const gap = Math.round(48 * (multiplier / 4))
+  const maxRowH = Math.round(400 * (multiplier / 4))
+  const pad = Math.round(44 * (multiplier / 4))
   const raw: Array<{ img: HTMLImageElement; w: number; h: number }> = []
 
   for (const o of sortObjectsForPrintRow(objects)) {
-    o.setCoords()
-    const r = o.getBoundingRect()
-    if (r.width < 2 || r.height < 2) continue
+    try {
+      const meta = (o as UserObj).meta
+      const isText =
+        meta === 'user-text' || o.type === 'i-text' || o.type === 'text' || o.type === 'textbox'
+      const textContent = isText ? getObjectText(o) : ''
+      const isolated = await exportIsolatedObjectPng(canvas, o, activeSide, multiplier)
+      if (!isolated) continue
 
-    const meta = (o as UserObj).meta
-    const isText =
-      meta === 'user-text' || o.type === 'i-text' || o.type === 'text' || o.type === 'textbox'
-    const textContent =
-      isText && typeof (o as { text?: string }).text === 'string'
-        ? (o as { text: string }).text
-        : ''
-
-    if (isText && textContent) {
-      const { body, emoji } = splitTrailingEmoji(textContent)
-      if (emoji && body) {
-        const emojiFrac = Math.min(0.32, 0.1 * emoji.length + 0.12)
-        const emojiW = r.width * emojiFrac
-        const textW = r.width - emojiW
-        const textPiece = await cropPieceFromFull(
-          fullImg,
-          multiplier,
-          r.left,
-          r.top,
-          textW,
-          r.height,
-        )
-        const emojiPiece = await cropPieceFromFull(
-          fullImg,
-          multiplier,
-          r.left + textW,
-          r.top,
-          emojiW,
-          r.height,
-        )
-        if (textPiece) raw.push(textPiece)
-        if (emojiPiece) raw.push(emojiPiece)
-        continue
+      if (isText && textContent) {
+        const { body, emoji } = splitTrailingEmoji(textContent)
+        if (emoji && body) {
+          const parts = await splitIsolatedTextAndEmoji(isolated, emoji)
+          raw.push(...parts)
+          continue
+        }
       }
-    }
 
-    const piece = await cropPieceFromFull(fullImg, multiplier, r.left, r.top, r.width, r.height)
-    if (piece) raw.push(piece)
+      const loaded = await loadImage(isolated)
+      raw.push({ img: loaded, w: loaded.naturalWidth, h: loaded.naturalHeight })
+    } catch {
+      /* skip broken object */
+    }
   }
 
   if (raw.length === 0) return null
@@ -438,6 +529,8 @@ export async function exportArtworkFromFabric(
     }
   }
 
+  const rowSection = await composePrintRowFromCanvas(canvas, userOnSide, opts.activeSide, m)
+
   blendSnap.forEach(({ o, gco, opacity, fill }) => {
     const patch: { globalCompositeOperation: GlobalCompositeOperation; opacity: number; fill?: unknown } = {
       globalCompositeOperation: gco,
@@ -460,9 +553,8 @@ export async function exportArtworkFromFabric(
   let transparentPng = await upscaleForPrint(transparentCrop.dataUrl)
   const flatPrintPng = await upscaleForPrint(flatCrop.dataUrl)
 
-  const rowSection = await composePrintRowSection(transparentFull, userOnSide, m)
   let printSheetPng = rowSection
-    ? await upscaleForPrint(rowSection.dataUrl)
+    ? await upscaleRowForPrint(rowSection.dataUrl)
     : await compositeOnBackground(transparentPng, '#ffffff')
 
   const sheetImg = await loadImage(printSheetPng).catch(() => null)

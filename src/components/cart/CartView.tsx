@@ -184,6 +184,10 @@ export function CartView() {
           slug: i.slug,
           printArtwork: i.printArtwork,
           printAspectRatio: i.printAspectRatio,
+          printArtworkWidthPx: i.printArtworkWidthPx,
+          printArtworkHeightPx: i.printArtworkHeightPx,
+          printWidthMm: i.printWidthMm,
+          printHeightMm: i.printHeightMm,
         })),
         {
           ...pricing,

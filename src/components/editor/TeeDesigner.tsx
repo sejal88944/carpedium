@@ -932,6 +932,10 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       color: color.name,
       previewImage: thumb && thumb.startsWith('data:') ? thumb : undefined,
       printAspectRatio: artworkExport?.aspectRatio ?? print.width / print.height,
+      printArtworkWidthPx: artworkExport?.widthPx,
+      printArtworkHeightPx: artworkExport?.heightPx,
+      printWidthMm: artworkExport?.printWidthMm,
+      printHeightMm: artworkExport?.printHeightMm,
     }
 
     let printArtworkForCart: string | undefined

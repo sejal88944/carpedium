@@ -288,11 +288,22 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
         : 4 / 5
 
   const fill = 0.96
-  let dw = artMaxW * fill
-  let dh = dw / ar
-  if (dh > artMaxH * fill) {
+  let dw: number
+  let dh: number
+  if (ar > 1.25) {
+    dw = artMaxW * fill
+    dh = dw / ar
+    if (dh > artMaxH * fill) {
+      dh = artMaxH * fill
+      dw = dh * ar
+    }
+  } else {
     dh = artMaxH * fill
     dw = dh * ar
+    if (dw > artMaxW * fill) {
+      dw = artMaxW * fill
+      dh = dw / ar
+    }
   }
   const ix = (pageW - dw) / 2
   const iy = artTop + (artMaxH - dh) / 2
@@ -393,6 +404,10 @@ export type CartPdfItem = {
   slug?: string
   printArtwork?: string
   printAspectRatio?: number
+  printArtworkWidthPx?: number
+  printArtworkHeightPx?: number
+  printWidthMm?: number
+  printHeightMm?: number
 }
 
 function resolveCartItemPrintArtwork(it: CartPdfItem): string | null {
@@ -663,6 +678,10 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
       quantity: it.qty,
       artworkDataUrl: artwork,
       printAspectRatio: it.printAspectRatio,
+      artworkWidthPx: it.printArtworkWidthPx,
+      artworkHeightPx: it.printArtworkHeightPx,
+      printWidthMm: it.printWidthMm,
+      printHeightMm: it.printHeightMm,
       designText: extractDesignTextFromTitle(it.title),
       orderId: meta.orderRef,
       orderDate,

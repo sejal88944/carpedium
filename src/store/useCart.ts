@@ -16,6 +16,10 @@ export type CartItem = {
   /** Compressed print artwork for cart / WhatsApp PDF page 2. */
   printArtwork?: string
   printAspectRatio?: number
+  printArtworkWidthPx?: number
+  printArtworkHeightPx?: number
+  printWidthMm?: number
+  printHeightMm?: number
 }
 
 type CartStore = {
