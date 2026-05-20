@@ -12,49 +12,114 @@ export type DesignPdfMeta = {
   customerPhone?: string
   customerEmail?: string
   customerAddress?: string
-  /** Width ÷ height of the print-area crop (page 2 fit). */
+  printType?: string
+  orderId?: string
+  orderDate?: string
+  /** Transparent or flat print artwork for page 2. */
+  artworkDataUrl: string
+  printWidthMm?: number
+  printHeightMm?: number
+  artworkWidthPx?: number
+  artworkHeightPx?: number
   printAspectRatio?: number
 }
 
-/**
- * Two-page A4 PDF:
- * - Page 1: structured order + client + design notes (no artwork).
- * - Page 2: artwork only, scaled to printable area (for production / screen print).
- *
- * WhatsApp cannot attach files from `wa.me`; we download this PDF for the customer to forward.
- */
-export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF {
-  const pdf = new jsPDF({
-    unit: 'mm',
-    format: 'a4',
-    orientation: 'portrait',
-    compress: true,
-  })
+function formatOrderDate(iso?: string) {
+  if (iso) {
+    try {
+      return new Date(iso).toLocaleString('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    } catch {
+      /* fall through */
+    }
+  }
+  return new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+}
 
-  const pageW = pdf.internal.pageSize.getWidth() // 210mm
-  const pageH = pdf.internal.pageSize.getHeight() // 297mm
+function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
+  const pageW = pdf.internal.pageSize.getWidth()
+  const pageH = pdf.internal.pageSize.getHeight()
+  const margin = 14
+  const innerW = pageW - margin * 2
+  const labelX = margin + 2
+  const valueX = margin + 48
+  const valueMax = pageW - valueX - margin
 
-  // Header band
-  pdf.setFillColor(14, 165, 233) // sky-500 brand
-  pdf.rect(0, 0, pageW, 24, 'F')
+  // Brand header
+  pdf.setFillColor(14, 165, 233)
+  pdf.rect(0, 0, pageW, 32, 'F')
   pdf.setTextColor(255, 255, 255)
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(16)
-  pdf.text(COMPANY.shortName, 12, 12)
+  pdf.setFontSize(18)
+  pdf.text(COMPANY.shortName, margin, 14)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
-  pdf.text('Custom T-Shirt Design Order Sheet', 12, 18)
-
-  pdf.setFontSize(9)
-  pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`, pageW - 12, 18, { align: 'right' })
+  pdf.text(COMPANY.tagline, margin, 21)
+  pdf.setFontSize(8)
+  pdf.text(`${COMPANY.phone}  ·  ${COMPANY.email}`, pageW - margin, 14, { align: 'right' })
+  pdf.text(COMPANY.siteUrl.replace(/^https?:\/\//, ''), pageW - margin, 20, { align: 'right' })
 
   pdf.setTextColor(15, 23, 42)
+  let y = 42
 
-  const margin = 12
-  const innerW = pageW - 2 * margin
-  const labelCol = margin + 4
-  const valueX = margin + 44
-  const valueMaxW = pageW - valueX - margin - 4
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(20)
+  pdf.text('ORDER INVOICE', margin, y)
+  y += 10
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('Custom T-Shirt Order — reference for production & delivery', margin, y)
+  y += 12
+
+  // Order meta strip
+  pdf.setFillColor(241, 245, 249)
+  pdf.setDrawColor(226, 232, 240)
+  pdf.roundedRect(margin, y, innerW, 22, 2, 2, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10)
+  pdf.setTextColor(51, 65, 85)
+  const orderId = meta.orderId || `ORD-${Date.now()}`
+  pdf.text(`Order ID: ${orderId}`, margin + 4, y + 8)
+  pdf.text(`Date: ${formatOrderDate(meta.orderDate)}`, margin + 4, y + 15)
+  pdf.text(`Print type: ${meta.printType || 'Custom DTG / Screen'}`, pageW / 2 + 4, y + 8)
+  y += 30
+
+  function panel(title: string, rows: Array<[string, string]>, startY: number): number {
+    let cy = startY + 12
+    rows.forEach(([label, val]) => {
+      const lines = pdf.splitTextToSize(val || '—', valueMax)
+      cy += Math.max(6, lines.length * 4.8)
+    })
+    const blockH = cy - startY + 8
+
+    pdf.setFillColor(248, 250, 252)
+    pdf.setDrawColor(203, 213, 225)
+    pdf.roundedRect(margin, startY, innerW, blockH, 2, 2, 'FD')
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(11)
+    pdf.setTextColor(51, 65, 85)
+    pdf.text(title, margin + 4, startY + 7)
+
+    cy = startY + 14
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    rows.forEach(([label, val]) => {
+      pdf.setTextColor(100, 116, 139)
+      pdf.text(label, labelX + 2, cy)
+      pdf.setTextColor(15, 23, 42)
+      const lines = pdf.splitTextToSize(val || '—', valueMax)
+      lines.forEach((line, li) => {
+        pdf.text(line, valueX, cy + li * 4.8)
+      })
+      cy += Math.max(6, lines.length * 4.8)
+    })
+    return startY + blockH + 8
+  }
 
   const orderRows: Array<[string, string]> = [
     ['Product', meta.title],
@@ -64,178 +129,183 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
     ['Unit price', meta.price ? `₹ ${meta.price.toLocaleString('en-IN')}` : '—'],
     ['Line total', meta.price ? `₹ ${(meta.price * (meta.quantity ?? 1)).toLocaleString('en-IN')}` : '—'],
   ]
-  const clientPairs: Array<[string, string]> = [
+  y = panel('ORDER DETAILS', orderRows, y)
+
+  const clientRows: Array<[string, string]> = [
     ['Full name', meta.customerName || '—'],
     ['Phone / WhatsApp', meta.customerPhone || '—'],
     ['Email', meta.customerEmail || '—'],
     ['Delivery address', meta.customerAddress?.trim() || '—'],
   ]
+  y = panel('CUSTOMER DETAILS', clientRows, y)
 
-  function drawPanel(yTop: number, heightMm: number) {
+  if (meta.notes?.trim()) {
+    const noteLines = pdf.splitTextToSize(meta.notes.trim(), innerW - 8)
+    const noteH = 14 + noteLines.length * 4.5
     pdf.setFillColor(248, 250, 252)
     pdf.setDrawColor(203, 213, 225)
-    pdf.setLineWidth(0.35)
-    pdf.roundedRect(margin, yTop, innerW, heightMm, 2, 2, 'FD')
-  }
-
-  /** Total vertical space for labelled rows when drawn at arbitrary Y. */
-  function pairsTotalHeight(pairs: Array<[string, string]>): number {
-    let sum = 0
-    pairs.forEach(([, val]) => {
-      const lines = pdf.splitTextToSize(val || '—', valueMaxW)
-      sum += Math.max(5.2, lines.length * 4.6)
-    })
-    return sum
-  }
-
-  function paintSectionHeading(yStart: number, title: string, subtitleLines: string[] | null) {
+    pdf.roundedRect(margin, y, innerW, noteH, 2, 2, 'FD')
     pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(10.5)
+    pdf.setFontSize(11)
     pdf.setTextColor(51, 65, 85)
-    pdf.text(title, margin + 4, yStart)
-
-    let y = yStart + 6
-    if (subtitleLines?.length) {
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(7.5)
-      pdf.setTextColor(100, 116, 139)
-      subtitleLines.forEach((ln) => {
-        pdf.text(ln, margin + 4, y, { maxWidth: innerW - 8 })
-        y += 3.7
-      })
-    }
-    return y + 3
-  }
-
-  function paintKeyValueRows(yStart: number, pairs: Array<[string, string]>): number {
-    let cy = yStart
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(10)
-    pairs.forEach(([label, val]) => {
-      pdf.setTextColor(100, 116, 139)
-      pdf.text(label, labelCol, cy)
-      pdf.setTextColor(15, 23, 42)
-      const lines = pdf.splitTextToSize(val || '—', valueMaxW)
-      lines.forEach((line, li) => {
-        pdf.text(line, valueX, cy + li * 4.6)
-      })
-      cy += Math.max(5.2, lines.length * 4.6)
-    })
-    return cy
-  }
-
-  const hasNotes = Boolean(meta.notes?.trim())
-  const noteLines = hasNotes ? pdf.splitTextToSize(meta.notes!.trim(), innerW - 8) : []
-
-  /** First key/value baseline offset from panel top — must match `paintSectionHeading(panel + 6, …, null)`. */
-  const PANEL_TO_FIRST_KV_ROW = 15
-  const PANEL_BOTTOM_PAD = 9
-
-  /** Row block for stacked panels */
-  function blockHeight(kvPairs: Array<[string, string]>): number {
-    return PANEL_TO_FIRST_KV_ROW + pairsTotalHeight(kvPairs) + PANEL_BOTTOM_PAD
-  }
-
-  function blockHeightNotes(): number {
-    if (!hasNotes) return 0
-    return PANEL_TO_FIRST_KV_ROW + noteLines.length * 4 + PANEL_BOTTOM_PAD
-  }
-
-  // ── PAGE 1: order + customer + notes (no tee mockup — avoids layout clashes) ─
-  let y = 28
-  const gap = 6
-
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9)
-  pdf.setTextColor(100, 116, 139)
-  pdf.text('PAGE 1 — ORDER & CONTACT (keep for reference)', margin, y)
-  y += 6
-
-  const bH = blockHeight(orderRows)
-  drawPanel(y, bH)
-  const rowsBStart = paintSectionHeading(y + 6, 'ORDER & PRODUCT DETAILS', null)
-  paintKeyValueRows(rowsBStart, orderRows)
-  y += bH + gap
-
-  const cH = blockHeight(clientPairs)
-  drawPanel(y, cH)
-  const rowsCStart = paintSectionHeading(y + 6, 'CLIENT / DELIVERY DETAILS', null)
-  paintKeyValueRows(rowsCStart, clientPairs)
-  y += cH + gap
-
-  if (hasNotes) {
-    const dH = blockHeightNotes()
-    drawPanel(y, dH)
-    let ny = paintSectionHeading(y + 6, 'DESIGN NOTES', null)
+    pdf.text('DESIGN NOTES', margin + 4, y + 6)
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(9)
     pdf.setTextColor(15, 23, 42)
+    let ny = y + 12
     noteLines.forEach((line) => {
       pdf.text(line, margin + 4, ny)
-      ny += 4
+      ny += 4.5
     })
+    y += noteH + 8
   }
 
-  pdf.setDrawColor(226, 232, 240)
-  pdf.line(12, pageH - 18, pageW - 12, pageH - 18)
-  pdf.setTextColor(100, 116, 139)
+  pdf.setFont('helvetica', 'italic')
   pdf.setFontSize(8)
+  pdf.setTextColor(100, 116, 139)
   pdf.text(
-    `${COMPANY.name}  ·  ${COMPANY.phone}  ·  ${COMPANY.email}`,
-    pageW / 2,
-    pageH - 11,
-    { align: 'center' },
+    'Page 2 contains print-ready artwork only (no T-shirt mockup). Use for direct printing.',
+    margin,
+    Math.min(y + 4, pageH - 28),
+    { maxWidth: innerW },
   )
-  pdf.text(COMPANY.siteUrl.replace(/^https?:\/\//, ''), pageW / 2, pageH - 6, { align: 'center' })
 
-  // ── PAGE 2: flat artwork only (scaled to A4 printable area) ─────────────
-  if (imageDataUrl && imageDataUrl.startsWith('data:image/')) {
-    const fmt: 'PNG' | 'JPEG' = imageDataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
-    pdf.addPage()
-    pdf.setFillColor(255, 255, 255)
-    pdf.rect(0, 0, pageW, pageH, 'F')
+  pdf.setDrawColor(226, 232, 240)
+  pdf.line(margin, pageH - 16, pageW - margin, pageH - 16)
+  pdf.setFontSize(7.5)
+  pdf.text(`${COMPANY.name}`, pageW / 2, pageH - 10, { align: 'center' })
+}
 
-    const printPad = 10
-    const maxW = pageW - printPad * 2
-    const maxH = pageH - printPad * 2
-    const ar = meta.printAspectRatio
-    const designAspect =
-      typeof ar === 'number' && ar > 0.05 && ar < 20 ? ar : 560 / 700
-    let dw = maxW
-    let dh = dw / designAspect
-    if (dh > maxH) {
-      dh = maxH
-      dw = dh * designAspect
+function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
+  const pageW = pdf.internal.pageSize.getWidth()
+  const pageH = pdf.internal.pageSize.getHeight()
+  const margin = 12
+
+  pdf.setFillColor(255, 255, 255)
+  pdf.rect(0, 0, pageW, pageH, 'F')
+
+  pdf.setFillColor(15, 23, 42)
+  pdf.rect(0, 0, pageW, 20, 'F')
+  pdf.setTextColor(255, 255, 255)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(14)
+  pdf.text('PRINT READY DESIGN', margin, 13)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.text('Artwork layer only — send to printing machine', pageW - margin, 13, { align: 'right' })
+
+  const footerH = 28
+  const artTop = 26
+  const artBottom = pageH - footerH
+  const artMaxW = pageW - margin * 2
+  const artMaxH = artBottom - artTop
+
+  const ar =
+    meta.printAspectRatio && meta.printAspectRatio > 0.05 && meta.printAspectRatio < 20
+      ? meta.printAspectRatio
+      : meta.artworkWidthPx && meta.artworkHeightPx
+        ? meta.artworkWidthPx / meta.artworkHeightPx
+        : 4 / 5
+
+  let dw = artMaxW
+  let dh = dw / ar
+  if (dh > artMaxH) {
+    dh = artMaxH
+    dw = dh * ar
+  }
+  const ix = (pageW - dw) / 2
+  const iy = artTop + (artMaxH - dh) / 2
+
+  // Light checker hint (transparency guide)
+  const cell = 4
+  pdf.setFillColor(248, 250, 252)
+  pdf.rect(ix - 2, iy - 2, dw + 4, dh + 4, 'F')
+  for (let cx = ix; cx < ix + dw; cx += cell) {
+    for (let cy = iy; cy < iy + dh; cy += cell) {
+      if (((Math.floor((cx - ix) / cell) + Math.floor((cy - iy) / cell)) % 2) === 0) {
+        pdf.setFillColor(241, 245, 249)
+        pdf.rect(cx, cy, cell, cell, 'F')
+      }
     }
-    const ix = (pageW - dw) / 2
-    const iy = (pageH - dh) / 2
+  }
+
+  pdf.setDrawColor(148, 163, 184)
+  pdf.setLineWidth(0.5)
+  pdf.roundedRect(ix - 2, iy - 2, dw + 4, dh + 4, 2, 2, 'S')
+
+  const url = meta.artworkDataUrl
+  if (url.startsWith('data:image/')) {
+    const fmt: 'PNG' | 'JPEG' = url.startsWith('data:image/png') ? 'PNG' : 'JPEG'
     try {
-      pdf.addImage(imageDataUrl, fmt, ix, iy, dw, dh, undefined, 'FAST')
+      pdf.addImage(url, fmt, ix, iy, dw, dh, undefined, 'SLOW')
     } catch {
       pdf.setFont('helvetica', 'italic')
       pdf.setFontSize(11)
       pdf.setTextColor(148, 163, 184)
-      pdf.text('Artwork could not be placed on page 2.', printPad, 40)
+      pdf.text('Artwork could not be embedded.', margin, iy + 20)
     }
+  }
+
+  const footY = pageH - footerH + 6
+  pdf.setDrawColor(226, 232, 240)
+  pdf.line(margin, footY - 4, pageW - margin, footY - 4)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(51, 65, 85)
+
+  const wMm = meta.printWidthMm ?? '—'
+  const hMm = meta.printHeightMm ?? '—'
+  const px =
+    meta.artworkWidthPx && meta.artworkHeightPx
+      ? `${meta.artworkWidthPx} × ${meta.artworkHeightPx} px`
+      : '—'
+
+  pdf.text(`Print area (approx.): ${wMm} × ${hMm} mm`, margin, footY)
+  pdf.text(`Export resolution: ${px}`, margin, footY + 5)
+  pdf.text(`T-shirt colour: ${meta.color ?? '—'}`, margin, footY + 10)
+  pdf.text(`Created: ${formatOrderDate(meta.orderDate)}`, pageW - margin, footY, { align: 'right' })
+}
+
+/**
+ * Professional two-page PDF: invoice (page 1) + print-ready artwork (page 2).
+ */
+export function buildDesignPdf(meta: DesignPdfMeta): jsPDF {
+  const pdf = new jsPDF({
+    unit: 'mm',
+    format: 'a4',
+    orientation: 'portrait',
+    compress: true,
+  })
+
+  drawInvoicePage(pdf, meta)
+
+  if (meta.artworkDataUrl?.startsWith('data:image/')) {
+    pdf.addPage()
+    drawPrintReadyPage(pdf, meta)
   }
 
   return pdf
 }
 
-export type DesignPdfResult = {
-  fileName: string
-  /** Full PDF as a `data:application/pdf;base64,...` URL — safe to persist & re-open. */
-  dataUrl: string
+/** @deprecated Use buildDesignPdf(meta) with artworkDataUrl inside meta. */
+export function buildDesignPdfLegacy(imageDataUrl: string, meta: Omit<DesignPdfMeta, 'artworkDataUrl'>) {
+  return buildDesignPdf({ ...meta, artworkDataUrl: imageDataUrl })
 }
 
-/**
- * Build PDF, trigger a browser download AND return its data URL so it can be
- * stored on the admin upload record for later viewing.
- */
-export function downloadDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): DesignPdfResult {
-  const safe = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'design'
-  const fileName = `aasha-sm-${safe}-${Date.now()}.pdf`
-  const pdf = buildDesignPdf(imageDataUrl, meta)
+export type DesignPdfResult = {
+  fileName: string
+  dataUrl: string
+  orderId: string
+  /** Separate transparent PNG for admin / print shop. */
+  printPngDataUrl?: string
+}
+
+export function downloadDesignPdf(meta: DesignPdfMeta, printPngDataUrl?: string): DesignPdfResult {
+  const orderId = meta.orderId || `ORD-${Date.now()}`
+  const safe =
+    meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'design'
+  const fileName = `aasha-sm-invoice-${safe}-${Date.now()}.pdf`
+  const pdf = buildDesignPdf({ ...meta, orderId })
   pdf.save(fileName)
   let dataUrl = ''
   try {
@@ -243,7 +313,7 @@ export function downloadDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): De
   } catch {
     dataUrl = ''
   }
-  return { fileName, dataUrl }
+  return { fileName, dataUrl, orderId, printPngDataUrl }
 }
 
 // ── Cart / order-summary PDF ───────────────────────────────────────────────
@@ -273,8 +343,6 @@ export type CartPdfMeta = {
 
 /**
  * Build a multi-page A4 PDF summarizing every cart item.
- * Each line shows the design thumbnail (for custom items), title, qty × price,
- * subtotal. Last page (or last block) shows totals.
  */
 export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
@@ -369,7 +437,6 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   pdf.text('Items', margin, y + 4)
   y += 10
 
-  // Column header row
   pdf.setFontSize(9)
   pdf.setFont('helvetica', 'bold')
   pdf.setTextColor(100, 116, 139)
@@ -459,7 +526,6 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
     pdf.line(margin, y - 4, pageW - margin, y - 4)
   })
 
-  // Totals box
   if (y + 40 > pageH - 30) {
     footer()
     pdf.addPage()
@@ -502,10 +568,8 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   return pdf
 }
 
-/** Build cart PDF and trigger download. Returns the filename used. */
 export function downloadCartPdf(items: CartPdfItem[], meta: CartPdfMeta): string {
-  const ref = meta.orderRef || `cart-${Date.now()}`
-  const fileName = `aasha-sm-${ref}.pdf`
+  const fileName = `aasha-sm-cart-${Date.now()}.pdf`
   const pdf = buildCartPdf(items, meta)
   pdf.save(fileName)
   return fileName

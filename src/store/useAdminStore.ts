@@ -128,6 +128,14 @@ export type AdminUpload = {
   /** Data URL of the generated design PDF (used to view/download from admin). */
   pdfUrl?: string
   pdfFileName?: string
+  /** Transparent print-ready PNG (artwork only). */
+  printArtworkUrl?: string
+  /** Full mockup preview PNG. */
+  mockupPreviewUrl?: string
+  /** Fabric design JSON for re-editing. */
+  designJson?: string
+  orderId?: string
+  printType?: string
   /** Order context captured at submission time. */
   color?: string
   size?: string

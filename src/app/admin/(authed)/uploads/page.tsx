@@ -18,6 +18,12 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { AdminPageHeader, Card, StatusBadge } from '@/components/admin/AdminUI'
+import {
+  downloadDesignJson,
+  downloadInvoicePdf,
+  downloadMockupPng,
+  downloadPrintDesignPng,
+} from '@/lib/adminDesignDownloads'
 import { useAdminStore, type AdminUpload } from '@/store/useAdminStore'
 
 const TABS = ['all', 'logo', 'image', 'text'] as const
@@ -134,8 +140,13 @@ export default function UploadsPage() {
                   onClick={() => setActive(u)}
                   className="block aspect-[4/3] w-full bg-cover bg-center"
                   style={{
-                    backgroundImage: u.url ? `url(${u.url})` : undefined,
-                    backgroundColor: u.url ? '#ffffff' : '#f1f5f9',
+                    backgroundImage: (u.printArtworkUrl || u.url)
+                      ? `url(${u.printArtworkUrl || u.url})`
+                      : undefined,
+                    backgroundColor: '#ffffff',
+                    backgroundSize: 'contain',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'center',
                   }}
                   aria-label={`Preview ${u.label}`}
                 />
@@ -204,34 +215,41 @@ export default function UploadsPage() {
                     <p className="mt-2 text-[11px] italic text-slate-500">{u.notes}</p>
                   ) : null}
 
-                  {/* PDF row */}
-                  {u.pdfUrl ? (
-                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs dark:border-rose-500/30 dark:bg-rose-500/10">
-                      <span className="flex min-w-0 items-center gap-2 font-bold text-rose-700 dark:text-rose-300">
-                        <FileText className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{u.pdfFileName || 'Design PDF'}</span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1">
-                        <a
-                          href={u.pdfUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="grid h-7 w-7 place-items-center rounded-lg bg-white text-rose-600 hover:bg-rose-100 dark:bg-rose-500/20"
-                          aria-label="View PDF"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </a>
-                        <a
-                          href={u.pdfUrl}
-                          download={u.pdfFileName || 'design.pdf'}
-                          className="grid h-7 w-7 place-items-center rounded-lg bg-white text-rose-600 hover:bg-rose-100 dark:bg-rose-500/20"
-                          aria-label="Download PDF"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                        </a>
-                      </span>
-                    </div>
+                  {u.orderId ? (
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      {u.orderId}
+                    </p>
                   ) : null}
+
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {u.pdfUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => downloadInvoicePdf(u)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                      >
+                        <FileText className="h-3 w-3" /> Invoice PDF
+                      </button>
+                    ) : null}
+                    {u.printArtworkUrl || u.url ? (
+                      <button
+                        type="button"
+                        onClick={() => downloadPrintDesignPng(u)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                      >
+                        <Download className="h-3 w-3" /> Print PNG
+                      </button>
+                    ) : null}
+                    {u.designJson ? (
+                      <button
+                        type="button"
+                        onClick={() => downloadDesignJson(u)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300"
+                      >
+                        <Download className="h-3 w-3" /> Design JSON
+                      </button>
+                    ) : null}
+                  </div>
 
                   {/* Actions */}
                   <div className="mt-3 grid grid-cols-5 gap-1">
@@ -322,16 +340,40 @@ export default function UploadsPage() {
             </button>
 
             <div className="grid gap-4 md:grid-cols-[1fr_280px]">
-              <div
-                className="grid place-items-center rounded-xl"
-                style={{ background: '#ffffff' }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={active.url}
-                  alt={active.label}
-                  className="max-h-[60vh] w-full rounded-xl object-contain"
-                />
+              <div className="space-y-3">
+                <div
+                  className="grid place-items-center rounded-xl border border-slate-200 p-2 dark:border-white/10"
+                  style={{
+                    background:
+                      'linear-gradient(45deg,#f1f5f9 25%,transparent 25%),linear-gradient(-45deg,#f1f5f9 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f1f5f9 75%),linear-gradient(-45deg,transparent 75%,#f1f5f9 75%)',
+                    backgroundSize: '16px 16px',
+                    backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0',
+                    backgroundColor: '#fff',
+                  }}
+                >
+                  <p className="mb-2 w-full text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Print-ready artwork
+                  </p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={active.printArtworkUrl || active.url}
+                    alt="Print artwork"
+                    className="max-h-[40vh] w-full rounded-lg object-contain"
+                  />
+                </div>
+                {active.mockupPreviewUrl || active.url ? (
+                  <div className="grid place-items-center rounded-xl bg-white p-2 dark:bg-slate-950">
+                    <p className="mb-2 w-full text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Mockup preview
+                    </p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={active.mockupPreviewUrl || active.url}
+                      alt={active.label}
+                      className="max-h-[28vh] w-full rounded-lg object-contain"
+                    />
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-4">
@@ -412,31 +454,37 @@ export default function UploadsPage() {
 
                 <div className="space-y-2">
                   {active.pdfUrl ? (
-                    <a
-                      href={active.pdfUrl}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => downloadInvoicePdf(active)}
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 text-xs font-bold text-white hover:opacity-90"
                     >
-                      <FileText className="h-3.5 w-3.5" /> View Design PDF
-                    </a>
+                      <FileText className="h-3.5 w-3.5" /> Download Invoice PDF
+                    </button>
                   ) : null}
-                  {active.pdfUrl ? (
-                    <a
-                      href={active.pdfUrl}
-                      download={active.pdfFileName || 'design.pdf'}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-xs font-bold text-rose-600 dark:border-rose-500/30"
+                  <button
+                    type="button"
+                    onClick={() => downloadPrintDesignPng(active)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:opacity-90"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download Print Design PNG
+                  </button>
+                  {active.designJson ? (
+                    <button
+                      type="button"
+                      onClick={() => downloadDesignJson(active)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 px-4 py-2.5 text-xs font-bold text-sky-700 dark:border-sky-500/30 dark:text-sky-300"
                     >
-                      <Download className="h-3.5 w-3.5" /> Download PDF
-                    </a>
+                      <Download className="h-3.5 w-3.5" /> Download Editable Design JSON
+                    </button>
                   ) : null}
-                  <a
-                    href={active.url}
-                    download
+                  <button
+                    type="button"
+                    onClick={() => downloadMockupPng(active)}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold dark:border-white/10"
                   >
-                    <Download className="h-3.5 w-3.5" /> Download HD Image
-                  </a>
+                    <Download className="h-3.5 w-3.5" /> Download Mockup PNG
+                  </button>
                 </div>
               </div>
             </div>
