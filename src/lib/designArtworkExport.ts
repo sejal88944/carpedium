@@ -397,14 +397,11 @@ export async function exportArtworkFromFabric(
   let transparentPng = await upscaleForPrint(transparentCrop.dataUrl)
   const flatPrintPng = await upscaleForPrint(flatCrop.dataUrl)
 
-  const rowSection = await composePrintRowSection(transparentFull, userOnSide, m)
-  let printSheetPng = rowSection
-    ? await upscaleForPrint(rowSection.dataUrl)
-    : await compositeOnBackground(transparentPng, '#ffffff')
+  const printSheetPng = await compositeOnBackground(transparentPng, '#ffffff')
 
   const sheetImg = await loadImage(printSheetPng).catch(() => null)
-  const tw = sheetImg?.naturalWidth || rowSection?.widthPx || transparentCrop.widthPx
-  const th = sheetImg?.naturalHeight || rowSection?.heightPx || transparentCrop.heightPx
+  const tw = sheetImg?.naturalWidth || transparentCrop.widthPx
+  const th = sheetImg?.naturalHeight || transparentCrop.heightPx
 
   const mmPerPx = CHEST_PRINT_WIDTH_MM / cropRegion.width
   const printWidthMm = Math.round(cropRegion.width * mmPerPx)
@@ -441,10 +438,7 @@ export async function exportArtworkFromFabric(
     heightPx: th,
     printWidthMm,
     printHeightMm,
-    aspectRatio:
-      rowSection && rowSection.widthPx > 0
-        ? rowSection.widthPx / rowSection.heightPx
-        : tw / Math.max(1, th),
+    aspectRatio: tw / Math.max(1, th),
     designJson,
     hasArtwork: true,
   }

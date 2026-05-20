@@ -997,6 +997,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             printAspectRatio: artworkExport?.aspectRatio ?? print.width / print.height,
             mockupPreviewUrl:
               hires?.startsWith('data:') ? hires : thumb?.startsWith('data:') ? thumb : undefined,
+            designText: text.trim() || undefined,
           },
           printArtwork,
         )

@@ -25,6 +25,16 @@ export type DesignPdfMeta = {
   printAspectRatio?: number
   /** Full T-shirt mockup — logo / text / emoji placement as the customer designed. */
   mockupPreviewUrl?: string
+  /** Custom text to print (shown as readable text on page 2, not split images). */
+  designText?: string
+}
+
+function extractDesignTextFromTitle(title: string): string | undefined {
+  const quoted = title.match(/[“"]([^”"]+)[”"]/)
+  if (quoted?.[1]?.trim()) return quoted[1].trim()
+  const afterDot = title.match(/·\s*(.+)$/)
+  if (afterDot?.[1]?.trim() && !afterDot[1].startsWith('http')) return afterDot[1].trim()
+  return undefined
 }
 
 const MOCKUP_ASPECT = 560 / 700
@@ -258,32 +268,36 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
   pdf.setFillColor(255, 255, 255)
   pdf.rect(0, 0, pageW, pageH, 'F')
 
+  const headerH = 24
   pdf.setFillColor(15, 23, 42)
-  pdf.rect(0, 0, pageW, 20, 'F')
+  pdf.rect(0, 0, pageW, headerH, 'F')
   pdf.setTextColor(255, 255, 255)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(14)
-  pdf.text('PRINT READY DESIGN', margin, 13)
+  pdf.text('PRINT READY DESIGN', margin, 15)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8)
   const sub =
     meta.title && meta.title.length < 48
       ? meta.title
-      : 'Logo · text · emoji in one row'
-  pdf.text(sub, pageW - margin, 13, { align: 'right' })
+      : 'Artwork + design text for production'
+  pdf.text(sub, pageW - margin, 15, { align: 'right' })
 
+  const designText =
+    meta.designText?.trim() || extractDesignTextFromTitle(meta.title) || meta.notes?.trim()
+  const textPanelH = designText ? 28 : 0
   const footerH = 28
-  const artTop = 30
-  const sectionLabelY = 22
+  const artTop = headerH + 14
   pdf.setTextColor(51, 65, 85)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(10)
-  pdf.text('CUSTOM DESIGN SECTION', margin, sectionLabelY)
+  pdf.text('PRINT ARTWORK', margin, headerH + 8)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8)
   pdf.setTextColor(100, 116, 139)
-  pdf.text('Logo, text and emoji side by side — same order as on the tee', margin + 2, sectionLabelY + 5)
-  const artBottom = pageH - footerH
+  pdf.text('Single combined design (logo + graphics)', margin + 2, headerH + 13)
+
+  const artBottom = pageH - footerH - textPanelH - 6
   const artMaxW = pageW - margin * 2
   const artMaxH = artBottom - artTop
 
@@ -323,6 +337,22 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
       pdf.setTextColor(148, 163, 184)
       pdf.text('Artwork could not be embedded.', margin, iy + 20)
     }
+  }
+
+  if (designText) {
+    const panelY = pageH - footerH - textPanelH
+    pdf.setFillColor(248, 250, 252)
+    pdf.setDrawColor(203, 213, 225)
+    pdf.roundedRect(margin, panelY, pageW - margin * 2, textPanelH - 2, 2, 2, 'FD')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(100, 116, 139)
+    pdf.text('DESIGN TEXT (for print)', margin + 4, panelY + 7)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(16)
+    pdf.setTextColor(15, 23, 42)
+    const textLines = pdf.splitTextToSize(designText, pageW - margin * 2 - 8)
+    pdf.text(textLines.slice(0, 2), margin + 4, panelY + 18)
   }
 
   const footY = pageH - footerH + 6
@@ -523,13 +553,11 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
     y += 2
   }
 
-  const placementPreview = items.find((it) => it.previewImage?.startsWith('data:image/'))
-    ?.previewImage
-  if (placementPreview) {
-    const boxW = 92
-    const boxH = 108
-    const boxX = (pageW - boxW) / 2
-    y = drawMockupPlacementBlock(pdf, placementPreview, boxX, y + 6, boxW, boxH) + 10
+  if (y > pageH - 95) {
+    footer()
+    pdf.addPage()
+    header()
+    y = 32
   }
 
   pdf.setFont('helvetica', 'bold')
@@ -540,7 +568,7 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   pdf.setFontSize(9)
   pdf.setFont('helvetica', 'bold')
   pdf.setTextColor(100, 116, 139)
-  pdf.text('Product', margin + 26, y)
+  pdf.text('Product', margin, y)
   pdf.text('Qty', pageW - margin - 50, y, { align: 'right' })
   pdf.text('Unit', pageW - margin - 28, y, { align: 'right' })
   pdf.text('Total', pageW - margin, y, { align: 'right' })
@@ -553,7 +581,8 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   pdf.setFontSize(10)
 
   items.forEach((it) => {
-    const rowH = 22
+    const hasDesignLine = !!extractDesignTextFromTitle(it.title)
+    const rowH = hasDesignLine ? 26 : 20
     if (y + rowH > pageH - 60) {
       footer()
       pdf.addPage()
@@ -561,32 +590,10 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
       y = 32
     }
 
-    const thumbX = margin
-    const thumbY = y - 4
-    const thumbS = 20
-    if (it.previewImage && it.previewImage.startsWith('data:image/')) {
-      const fmt: 'PNG' | 'JPEG' = it.previewImage.startsWith('data:image/png')
-        ? 'PNG'
-        : 'JPEG'
-      try {
-        pdf.addImage(it.previewImage, fmt, thumbX, thumbY, thumbS, thumbS, undefined, 'FAST')
-      } catch {
-        pdf.setDrawColor(226, 232, 240)
-        pdf.roundedRect(thumbX, thumbY, thumbS, thumbS, 2, 2, 'S')
-      }
-    } else {
-      pdf.setFillColor(241, 245, 249)
-      pdf.roundedRect(thumbX, thumbY, thumbS, thumbS, 2, 2, 'F')
-      pdf.setTextColor(148, 163, 184)
-      pdf.setFontSize(7)
-      pdf.text('TEE', thumbX + thumbS / 2, thumbY + thumbS / 2 + 1, { align: 'center' })
-      pdf.setFontSize(10)
-      pdf.setTextColor(15, 23, 42)
-    }
-
-    const titleX = margin + 26
+    const titleX = margin
     pdf.setFont('helvetica', 'bold')
-    const titleLines = pdf.splitTextToSize(it.title, usableW - 26 - 60)
+    const productLabel = it.title.replace(/\s*·\s*[“"][^”"]+[”"]\s*$/, '').trim() || it.title
+    const titleLines = pdf.splitTextToSize(productLabel, usableW - 70)
     pdf.text(titleLines.slice(0, 2), titleX, y + 2)
 
     pdf.setFont('helvetica', 'normal')
@@ -594,17 +601,15 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
     pdf.setFontSize(9)
     const extras = [it.size && `Size ${it.size}`, it.color && it.color].filter(Boolean).join(' · ')
     if (extras) pdf.text(extras, titleX, y + 8)
-    if (it.slug) {
-      const link = `${COMPANY.siteUrl.replace(/\/$/, '')}/shop/${it.slug}`
-      pdf.setTextColor(14, 165, 233)
-      pdf.textWithLink(link, titleX, y + 13, { url: link })
+    const designLine = extractDesignTextFromTitle(it.title)
+    if (designLine) {
+      pdf.setTextColor(15, 23, 42)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(10)
+      pdf.text(`Text: ${designLine}`, titleX, y + 14)
+      pdf.setFont('helvetica', 'normal')
       pdf.setTextColor(100, 116, 139)
-    }
-    if (it.previewImage) {
-      pdf.setTextColor(16, 185, 129)
-      pdf.setFontSize(8)
-      pdf.text('Custom design', titleX, y + 17)
-      pdf.setTextColor(100, 116, 139)
+      pdf.setFontSize(9)
     }
 
     pdf.setTextColor(15, 23, 42)
@@ -691,6 +696,7 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
       quantity: it.qty,
       artworkDataUrl: artwork,
       printAspectRatio: it.printAspectRatio,
+      designText: extractDesignTextFromTitle(it.title),
       orderId: meta.orderRef,
       orderDate,
     })
