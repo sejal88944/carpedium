@@ -14,7 +14,12 @@ import { COMPANY, TEE_COLORS, type TeeColorId } from '@/data/brand'
 import { useCart } from '@/store/useCart'
 import { useAdminStore } from '@/store/useAdminStore'
 import { openWhatsAppOrder } from '@/lib/whatsappOrder'
-import { downloadDataUrl, exportArtworkFromFabric } from '@/lib/designArtworkExport'
+import {
+  compressArtworkForCartStorage,
+  downloadDataUrl,
+  exportArtworkFromFabric,
+  stashPrintArtworkForCartItem,
+} from '@/lib/designArtworkExport'
 import { downloadDesignPdf } from '@/lib/designPdf'
 import { openPrintDialogForRasterDesign } from '@/lib/printDesignSheet'
 import { tintTeeMockup } from '@/lib/teeMockup'
@@ -916,19 +921,37 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             : ''
     const printCrop = printArtwork
     const unitPrice = BASE_PRICE + PRINT_CHARGE
+    const cartItemId = `custom-${Date.now()}`
     const item = {
-      slug: `custom-${Date.now()}`,
+      id: cartItemId,
+      slug: cartItemId,
       title: `Custom ${color.name} Tee${text ? ` · “${text}”` : ''}`,
       price: unitPrice,
       qty: quantity,
       size: 'M',
       color: color.name,
       previewImage: thumb && thumb.startsWith('data:') ? thumb : undefined,
+      printAspectRatio: artworkExport?.aspectRatio ?? print.width / print.height,
     }
+
+    let printArtworkForCart: string | undefined
+    if (printArtwork.startsWith('data:')) {
+      stashPrintArtworkForCartItem(cartItemId, printArtwork)
+      try {
+        printArtworkForCart = await compressArtworkForCartStorage(printArtwork, 900, 0.88)
+      } catch {
+        printArtworkForCart = printArtwork
+      }
+    }
+
     try {
-      add(item)
+      add({ ...item, printArtwork: printArtworkForCart })
     } catch {
-      add({ ...item, previewImage: undefined })
+      try {
+        add({ ...item, previewImage: undefined, printArtwork: printArtworkForCart })
+      } catch {
+        add({ ...item, previewImage: undefined, printArtwork: undefined })
+      }
     }
 
     // Generate + download the design PDF so the customer has a file ready to

@@ -13,6 +13,9 @@ export type CartItem = {
   color?: string
   imageTone?: string
   previewImage?: string
+  /** Compressed print artwork for cart / WhatsApp PDF page 2. */
+  printArtwork?: string
+  printAspectRatio?: number
 }
 
 type CartStore = {
@@ -79,19 +82,21 @@ export const useCart = create<CartStore>()(
     }),
     {
       name: 'aasha-cart',
-      version: 2,
-      // v2: cart items now carry small JPEG previewImage thumbnails.
-      // Drop oversized preview blobs from older versions so quota errors don't reoccur.
+      version: 3,
       migrate: (persisted) => {
         const s = persisted as Partial<CartStore> | undefined
         if (!s) return { items: [], wishlist: [], recentlyViewed: [], coupon: null } as Partial<CartStore>
         return {
           ...s,
           items: (s.items ?? []).map((i) => {
-            if (i.previewImage && i.previewImage.length > 60_000) {
-              return { ...i, previewImage: undefined }
+            let next = { ...i }
+            if (next.previewImage && next.previewImage.length > 60_000) {
+              next = { ...next, previewImage: undefined }
             }
-            return i
+            if (next.printArtwork && next.printArtwork.length > 200_000) {
+              next = { ...next, printArtwork: undefined }
+            }
+            return next
           }),
         }
       },

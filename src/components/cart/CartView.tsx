@@ -174,6 +174,7 @@ export function CartView() {
     try {
       pdfFileName = downloadCartPdf(
         items.map((i) => ({
+          id: i.id,
           title: i.title,
           qty: i.qty,
           price: i.price,
@@ -181,6 +182,8 @@ export function CartView() {
           color: i.color,
           previewImage: i.previewImage,
           slug: i.slug,
+          printArtwork: i.printArtwork,
+          printAspectRatio: i.printAspectRatio,
         })),
         {
           ...pricing,

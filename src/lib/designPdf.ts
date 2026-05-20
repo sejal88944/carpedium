@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { readPrintArtworkForCartItem } from '@/lib/designArtworkExport'
 import { COMPANY } from '@/data/brand'
 
 export type DesignPdfMeta = {
@@ -192,7 +193,11 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
   pdf.text('PRINT READY DESIGN', margin, 13)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8)
-  pdf.text('Text · emoji · logo — exact design from cart', pageW - margin, 13, { align: 'right' })
+  const sub =
+    meta.title && meta.title.length < 48
+      ? meta.title
+      : 'Text · emoji · logo — exact design from cart'
+  pdf.text(sub, pageW - margin, 13, { align: 'right' })
 
   const footerH = 28
   const artTop = 26
@@ -309,6 +314,7 @@ export function downloadDesignPdf(meta: DesignPdfMeta, printPngDataUrl?: string)
 // ── Cart / order-summary PDF ───────────────────────────────────────────────
 
 export type CartPdfItem = {
+  id?: string
   title: string
   qty: number
   price: number
@@ -316,6 +322,17 @@ export type CartPdfItem = {
   color?: string
   previewImage?: string
   slug?: string
+  printArtwork?: string
+  printAspectRatio?: number
+}
+
+function resolveCartItemPrintArtwork(it: CartPdfItem): string | null {
+  if (it.printArtwork?.startsWith('data:')) return it.printArtwork
+  if (it.id) {
+    const session = readPrintArtworkForCartItem(it.id)
+    if (session) return session
+  }
+  return null
 }
 
 export type CartPdfMeta = {
@@ -554,7 +571,38 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   pdf.line(boxX + 4, y + dy, boxX + boxW - 4, y + dy)
   writeRow('Total', `Rs. ${meta.total.toLocaleString('en-IN')}`, dy + 6, true)
 
+  const customPrintItems = items.filter((it) => resolveCartItemPrintArtwork(it))
+  if (customPrintItems.length > 0) {
+    pdf.setFont('helvetica', 'italic')
+    pdf.setFontSize(8)
+    pdf.setTextColor(100, 116, 139)
+    pdf.text(
+      `Print-ready design on next ${customPrintItems.length} page(s) — text / logo / emoji for production.`,
+      margin,
+      pageH - 24,
+      { maxWidth: usableW },
+    )
+  }
+
   footer()
+
+  const orderDate = new Date().toISOString()
+  customPrintItems.forEach((it) => {
+    const artwork = resolveCartItemPrintArtwork(it)
+    if (!artwork) return
+    pdf.addPage()
+    drawPrintReadyPage(pdf, {
+      title: it.title,
+      color: it.color,
+      size: it.size,
+      quantity: it.qty,
+      artworkDataUrl: artwork,
+      printAspectRatio: it.printAspectRatio,
+      orderId: meta.orderRef,
+      orderDate,
+    })
+  })
+
   return pdf
 }
 

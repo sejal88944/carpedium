@@ -289,6 +289,62 @@ export async function exportArtworkFromFabric(
   }
 }
 
+const PRINT_ARTWORK_SESSION_PREFIX = 'aasha-print-artwork:'
+
+/** Full-quality artwork for cart PDF (same browser session). */
+export function stashPrintArtworkForCartItem(cartItemId: string, dataUrl: string) {
+  if (typeof window === 'undefined' || !dataUrl.startsWith('data:')) return
+  try {
+    sessionStorage.setItem(`${PRINT_ARTWORK_SESSION_PREFIX}${cartItemId}`, dataUrl)
+  } catch {
+    /* quota — cart item may still carry compressed printArtwork */
+  }
+}
+
+export function readPrintArtworkForCartItem(cartItemId: string): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const s = sessionStorage.getItem(`${PRINT_ARTWORK_SESSION_PREFIX}${cartItemId}`)
+    return s?.startsWith('data:') ? s : null
+  } catch {
+    return null
+  }
+}
+
+/** JPEG downscale for cart localStorage (keeps print readable in PDF page 2). */
+export function compressArtworkForCartStorage(
+  dataUrl: string,
+  maxSide = 900,
+  quality = 0.88,
+): Promise<string> {
+  return new Promise((resolve) => {
+    if (!dataUrl.startsWith('data:')) return resolve(dataUrl)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const iw = img.naturalWidth || img.width
+        const ih = img.naturalHeight || img.height
+        const scale = Math.min(1, maxSide / Math.max(iw, ih))
+        const w = Math.max(1, Math.round(iw * scale))
+        const h = Math.max(1, Math.round(ih * scale))
+        const c = document.createElement('canvas')
+        c.width = w
+        c.height = h
+        const ctx = c.getContext('2d')
+        if (!ctx) return resolve(dataUrl)
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, w, h)
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(c.toDataURL('image/jpeg', quality))
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
 export function downloadDataUrl(dataUrl: string, filename: string) {
   if (typeof document === 'undefined') return
   const a = document.createElement('a')
