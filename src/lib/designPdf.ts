@@ -12,6 +12,8 @@ export type DesignPdfMeta = {
   customerPhone?: string
   customerEmail?: string
   customerAddress?: string
+  /** Width ÷ height of the print-area crop (page 2 fit). */
+  printAspectRatio?: number
 }
 
 /**
@@ -196,7 +198,9 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
     const printPad = 10
     const maxW = pageW - printPad * 2
     const maxH = pageH - printPad * 2
-    const designAspect = 560 / 700
+    const ar = meta.printAspectRatio
+    const designAspect =
+      typeof ar === 'number' && ar > 0.05 && ar < 20 ? ar : 560 / 700
     let dw = maxW
     let dh = dw / designAspect
     if (dh > maxH) {

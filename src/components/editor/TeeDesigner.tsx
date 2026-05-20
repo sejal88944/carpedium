@@ -37,6 +37,42 @@ function teeZone(side: 'front' | 'back') {
     bounds: TEE_BOUNDS,
   }
 }
+
+/** Crop a full-canvas Fabric PNG to the chest print rectangle (logical px × multiplier). */
+function cropDataUrlToPrintRegion(
+  dataUrl: string,
+  region: { left: number; top: number; width: number; height: number },
+  multiplier: number,
+): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const sx = Math.round(region.left * multiplier)
+        const sy = Math.round(region.top * multiplier)
+        const sw = Math.max(1, Math.round(region.width * multiplier))
+        const sh = Math.max(1, Math.round(region.height * multiplier))
+        const capW = img.naturalWidth || img.width
+        const capH = img.naturalHeight || img.height
+        const sx2 = Math.min(sx, Math.max(0, capW - 1))
+        const sy2 = Math.min(sy, Math.max(0, capH - 1))
+        const sw2 = Math.min(sw, capW - sx2)
+        const sh2 = Math.min(sh, capH - sy2)
+        const out = document.createElement('canvas')
+        out.width = sw2
+        out.height = sh2
+        const ctx = out.getContext('2d')
+        if (!ctx) return resolve(dataUrl)
+        ctx.drawImage(img, sx2, sy2, sw2, sh2, 0, 0, sw2, sh2)
+        resolve(out.toDataURL('image/png'))
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
 const BASE_PRICE = 299
 const PRINT_CHARGE = 150
 
@@ -824,7 +860,49 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     syncPreview()
   }
 
-  function handleAddToCart() {
+  async function exportFlatPrintCropForPdf(teeBgHex: string): Promise<string> {
+    const canvas = fabricRef.current
+    if (!canvas || typeof document === 'undefined') return ''
+    const activeSide = sideRef.current
+    const m = 3
+    const snapshot: Array<{ o: FabricObject; vis: boolean }> = []
+
+    canvas.getObjects().forEach((o) => {
+      const meta = (o as UserObject).meta
+      if (meta === '__tee' || meta === '__grid' || meta === 'label') {
+        snapshot.push({ o, vis: o.visible })
+        o.set('visible', false)
+        return
+      }
+      const ps = (o as UserObject).printSide
+      if (ps && ps !== activeSide) {
+        snapshot.push({ o, vis: o.visible })
+        o.set('visible', false)
+      }
+    })
+
+    const prevBg = canvas.backgroundColor ?? 'transparent'
+    canvas.backgroundColor = teeBgHex
+    canvas.requestRenderAll()
+
+    let full = ''
+    try {
+      full = canvas.toDataURL({ format: 'png', multiplier: m })
+    } catch {
+      full = ''
+    }
+
+    canvas.backgroundColor = prevBg
+    snapshot.forEach(({ o, vis }) => o.set('visible', vis))
+    canvas.requestRenderAll()
+
+    if (!full?.startsWith('data:')) return ''
+
+    const { print } = teeZone(activeSide)
+    return cropDataUrlToPrintRegion(full, print, m)
+  }
+
+  async function handleAddToCart() {
     if (!customerName.trim() || !customerPhone.trim()) {
       alert('Please enter your name and phone number so we can confirm your order.')
       return
@@ -848,6 +926,15 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
 
     const thumb = exportThumbnail()
     const hires = exportPreview()
+    let printCrop = ''
+    try {
+      printCrop = await exportFlatPrintCropForPdf(color.hex)
+    } catch (e) {
+      console.warn('print-area PDF export failed', e)
+    }
+    const pdfImage = printCrop.startsWith('data:') ? printCrop : hires
+    const { print } = teeZone(sideRef.current)
+    const printAspectRatio = print.width / print.height
     const unitPrice = BASE_PRICE + PRINT_CHARGE
     const item = {
       slug: `custom-${Date.now()}`,
@@ -868,9 +955,9 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     // attach in WhatsApp. wa.me deep links cannot attach files themselves.
     let pdfFileName: string | undefined
     let pdfDataUrl: string | undefined
-    if (hires && hires.startsWith('data:')) {
+    if (pdfImage && pdfImage.startsWith('data:')) {
       try {
-        const result = downloadDesignPdf(hires, {
+        const result = downloadDesignPdf(pdfImage, {
           title: item.title,
           color: item.color,
           size: item.size,
@@ -881,6 +968,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           customerPhone: customerPhone.trim(),
           customerEmail: customerEmail.trim() || undefined,
           customerAddress: customerAddress.trim() || undefined,
+          printAspectRatio,
         })
         pdfFileName = result.fileName
         pdfDataUrl = result.dataUrl
@@ -1415,7 +1503,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             <section className="space-y-3">
               <button
                 type="button"
-                onClick={handleAddToCart}
+                onClick={() => void handleAddToCart()}
                 className="w-full rounded-full bg-gradient-to-r from-sky-500 to-blue-700 py-4 text-sm font-bold text-white shadow-glow transition hover:scale-[1.01]"
               >
                 Add to Cart
