@@ -829,6 +829,10 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       alert('Please enter your name and phone number so we can confirm your order.')
       return
     }
+    if (!customerAddress.trim()) {
+      alert('Please enter your full delivery address — required for shipping and the order PDF.')
+      return
+    }
     persistCustomer()
 
     try {
@@ -1368,8 +1372,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                 Your details
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                Tumcha naav ani phone — order confirm krayla lagto. Delivery patta tarihi tachya khali
-                — optional (WhatsApp ani PDF madhe yayel).
+                Naav, phone ani <strong className="font-semibold text-slate-600">delivery patta</strong>{' '}
+                — order confirm ani ship sathi lagto.
               </p>
               <div className="mt-3 space-y-2">
                 <input
@@ -1400,8 +1404,9 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
                   onBlur={persistCustomer}
-                  placeholder="Delivery address (optional)"
+                  placeholder="Full delivery address *"
                   rows={3}
+                  required
                   className="w-full resize-y rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none ring-brand/30 focus:ring-4 dark:border-white/10 dark:bg-void-3"
                 />
               </div>

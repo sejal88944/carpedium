@@ -15,12 +15,11 @@ export type DesignPdfMeta = {
 }
 
 /**
- * Generate an A4 PDF containing the customer's custom design preview plus order metadata.
- * Returns the jsPDF instance so the caller can save() / output() as needed.
+ * Two-page A4 PDF:
+ * - Page 1: structured order + client + design notes (no artwork).
+ * - Page 2: artwork only, scaled to printable area (for production / screen print).
  *
- * NOTE: WhatsApp `wa.me` deep links cannot attach files. To deliver the design
- * we trigger a browser download of this PDF, and the WhatsApp text message
- * instructs the customer to attach the just-downloaded file to the chat.
+ * WhatsApp cannot attach files from `wa.me`; we download this PDF for the customer to forward.
  */
 export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF {
   const pdf = new jsPDF({
@@ -123,32 +122,14 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
     return cy
   }
 
-  const footerReserve = 22
-  const safeBottom = pageH - footerReserve
-  const gap = 6
-  const aTop = 26
-
-  const headingA = 'A. CUSTOM T-SHIRT DESIGN (PRINT REFERENCE)'
-  const subA = [
-    'Isolated artwork preview for printers — placement, colours & scale reference.',
-    'Confirm final Hi-Res artwork over WhatsApp if this export is compressed.',
-  ]
-
   const hasNotes = Boolean(meta.notes?.trim())
   const noteLines = hasNotes ? pdf.splitTextToSize(meta.notes!.trim(), innerW - 8) : []
 
-  const imgW = 96
-  const framePad = 2.5
-  const hdrPadTopA = 6
-
-  /** First key/value row baseline = panelTop + this (see `paintSectionHeading(panelTop + 6, title, null)`). */
+  /** First key/value baseline offset from panel top — must match `paintSectionHeading(panel + 6, …, null)`. */
   const PANEL_TO_FIRST_KV_ROW = 15
   const PANEL_BOTTOM_PAD = 9
 
-  /** Matches `paintSectionHeading(aTop + hdrPadTopA, headingA, subA)` end Y before image frame. */
-  const sectionAHeaderBelowTop = hdrPadTopA + 6 + subA.length * 3.7 + 3
-
-  /** Row block for B/C panels */
+  /** Row block for stacked panels */
   function blockHeight(kvPairs: Array<[string, string]>): number {
     return PANEL_TO_FIRST_KV_ROW + pairsTotalHeight(kvPairs) + PANEL_BOTTOM_PAD
   }
@@ -158,70 +139,32 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
     return PANEL_TO_FIRST_KV_ROW + noteLines.length * 4 + PANEL_BOTTOM_PAD
   }
 
-  /** Returns bottom edge Y of composed page layout for a given drawable image height. */
-  function bottomEdge(imgDrawInnerH: number) {
-    const imageTop = aTop + sectionAHeaderBelowTop
-    const framedH = imgDrawInnerH + framePad * 2
-    const aBottom = imageTop + framedH + 8
+  // ── PAGE 1: order + customer + notes (no tee mockup — avoids layout clashes) ─
+  let y = 28
+  const gap = 6
 
-    let yPtr = aBottom + gap + blockHeight(orderRows)
-    yPtr += gap + blockHeight(clientPairs)
-    if (hasNotes) yPtr += gap + blockHeightNotes()
-    return yPtr
-  }
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('PAGE 1 — ORDER & CONTACT (keep for reference)', margin, y)
+  y += 6
 
-  let imgDrawInnerH = 116
-  while (imgDrawInnerH >= 78 && bottomEdge(imgDrawInnerH) > safeBottom + 2) {
-    imgDrawInnerH -= 8
-  }
-
-  const imageTopFinal = aTop + sectionAHeaderBelowTop
-  const framedHFinal = imgDrawInnerH + framePad * 2
-  const aBottomFinal = imageTopFinal + framedHFinal + 8
-  const aHeightFinal = aBottomFinal - aTop
-
-  // ── A: design (own panel) ───────────────────────────────────────────────
-  drawPanel(aTop, aHeightFinal)
-  paintSectionHeading(aTop + hdrPadTopA, headingA, subA)
-
-  const imgX = (pageW - imgW) / 2
-  pdf.setDrawColor(148, 163, 184)
-  pdf.setLineWidth(0.4)
-  pdf.roundedRect(imgX - framePad, imageTopFinal, imgW + framePad * 2, framedHFinal, 2, 2, 'S')
-
-  if (imageDataUrl && imageDataUrl.startsWith('data:image/')) {
-    const fmt: 'PNG' | 'JPEG' = imageDataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
-    try {
-      pdf.addImage(imageDataUrl, fmt, imgX, imageTopFinal + framePad, imgW, imgDrawInnerH, undefined, 'FAST')
-    } catch {
-      pdf.setFont('helvetica', 'italic')
-      pdf.setFontSize(9)
-      pdf.setTextColor(148, 163, 184)
-      pdf.text('(Preview image could not be embedded.)', imgX, imageTopFinal + imgDrawInnerH / 2)
-    }
-  }
-
-  // ── B: order & product ───────────────────────────────────────────────────
-  const bTop = aBottomFinal + gap
   const bH = blockHeight(orderRows)
-  drawPanel(bTop, bH)
-  const rowsBStart = paintSectionHeading(bTop + 6, 'B. ORDER & PRODUCT DETAILS', null)
+  drawPanel(y, bH)
+  const rowsBStart = paintSectionHeading(y + 6, 'ORDER & PRODUCT DETAILS', null)
   paintKeyValueRows(rowsBStart, orderRows)
+  y += bH + gap
 
-  // ── C: client / delivery ─────────────────────────────────────────────────
-  const cTop = bTop + bH + gap
   const cH = blockHeight(clientPairs)
-  drawPanel(cTop, cH)
-  const rowsCStart = paintSectionHeading(cTop + 6, 'C. CLIENT / DELIVERY DETAILS', null)
+  drawPanel(y, cH)
+  const rowsCStart = paintSectionHeading(y + 6, 'CLIENT / DELIVERY DETAILS', null)
   paintKeyValueRows(rowsCStart, clientPairs)
+  y += cH + gap
 
-  // ── D: design notes ──────────────────────────────────────────────────────
   if (hasNotes) {
-    const dTop = cTop + cH + gap
     const dH = blockHeightNotes()
-    drawPanel(dTop, dH)
-    let ny = paintSectionHeading(dTop + 6, 'D. DESIGN NOTES & INSTRUCTIONS', null)
-
+    drawPanel(y, dH)
+    let ny = paintSectionHeading(y + 6, 'DESIGN NOTES', null)
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(9)
     pdf.setTextColor(15, 23, 42)
@@ -230,6 +173,7 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
       ny += 4
     })
   }
+
   pdf.setDrawColor(226, 232, 240)
   pdf.line(12, pageH - 18, pageW - 12, pageH - 18)
   pdf.setTextColor(100, 116, 139)
@@ -241,6 +185,35 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
     { align: 'center' },
   )
   pdf.text(COMPANY.siteUrl.replace(/^https?:\/\//, ''), pageW / 2, pageH - 6, { align: 'center' })
+
+  // ── PAGE 2: flat artwork only (scaled to A4 printable area) ─────────────
+  if (imageDataUrl && imageDataUrl.startsWith('data:image/')) {
+    const fmt: 'PNG' | 'JPEG' = imageDataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
+    pdf.addPage()
+    pdf.setFillColor(255, 255, 255)
+    pdf.rect(0, 0, pageW, pageH, 'F')
+
+    const printPad = 10
+    const maxW = pageW - printPad * 2
+    const maxH = pageH - printPad * 2
+    const designAspect = 560 / 700
+    let dw = maxW
+    let dh = dw / designAspect
+    if (dh > maxH) {
+      dh = maxH
+      dw = dh * designAspect
+    }
+    const ix = (pageW - dw) / 2
+    const iy = (pageH - dh) / 2
+    try {
+      pdf.addImage(imageDataUrl, fmt, ix, iy, dw, dh, undefined, 'FAST')
+    } catch {
+      pdf.setFont('helvetica', 'italic')
+      pdf.setFontSize(11)
+      pdf.setTextColor(148, 163, 184)
+      pdf.text('Artwork could not be placed on page 2.', printPad, 40)
+    }
+  }
 
   return pdf
 }
@@ -378,11 +351,11 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
       pdf.setFontSize(10)
       const parts = text.split('\n')
       let lineY = y
-      parts.forEach((part, idx) => {
-        pdf.text(part, margin + 28, lineY)
-        if (idx < parts.length - 1) lineY += 5
+      parts.forEach((part) => {
+        pdf.text(part, margin + 28, lineY, { maxWidth: usableW - 32 })
+        lineY += 5
       })
-      y = lineY + 6
+      y = lineY + 4
     }
     y += 2
   }

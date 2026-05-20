@@ -143,6 +143,10 @@ export function CartView() {
       setCustomerError('Name ani phone tako, mg WhatsApp open hoil.')
       return
     }
+    if (!addr) {
+      setCustomerError('Delivery patta (address) tak — order confirm ani ship sathi lagto.')
+      return
+    }
     setCustomerError('')
 
     const code = `ORD-${Date.now().toString(36).toUpperCase()}`
@@ -617,7 +621,8 @@ export function CartView() {
               <textarea
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
-                placeholder="Delivery address (optional)"
+                placeholder="Delivery address *"
+                required
                 rows={3}
                 className="w-full resize-y rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-void-3"
               />
