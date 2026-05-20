@@ -16,7 +16,7 @@ export function PublicChrome({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Navbar />
-      <main className="min-h-screen pt-20">{children}</main>
+      <main className="min-h-screen overflow-x-hidden pt-20 pb-safe-mobile md:pb-0">{children}</main>
       <Footer />
       <FloatingCTA />
     </>

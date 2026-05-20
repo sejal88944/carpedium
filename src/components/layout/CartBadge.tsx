@@ -9,7 +9,7 @@ export function CartBadge() {
   return (
     <Link
       href="/cart"
-      className="glass relative hidden h-10 w-10 items-center justify-center rounded-full text-sm font-bold transition hover:scale-105 md:inline-flex"
+      className="glass relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition hover:scale-105"
       aria-label="Cart"
     >
       🛒

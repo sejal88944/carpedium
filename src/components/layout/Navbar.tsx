@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '@/components/ThemeProvider'
+import { useCart } from '@/store/useCart'
 import { CartBadge } from '@/components/layout/CartBadge'
 import { BrandLogo } from '@/components/layout/BrandLogo'
 
@@ -24,6 +25,7 @@ export function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const { theme, toggle } = useTheme()
+  const cartCount = useCart((s) => s.items.reduce((n, i) => n + i.qty, 0))
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12)
@@ -40,8 +42,8 @@ export function Navbar() {
           : 'border-b border-transparent bg-white/55 backdrop-blur-md dark:bg-void/45'
       }`}
     >
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 lg:px-8">
-        <BrandLogo href="/" size="sm" />
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-3 sm:h-20 sm:px-4 lg:px-8">
+        <BrandLogo href="/" size="sm" className="min-w-0 shrink" />
         <nav className="hidden items-center gap-1 rounded-full border border-black/5 bg-white/55 p-1 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/5 lg:flex">
           {LINKS.map((l) => (
             <Link
@@ -99,6 +101,20 @@ export function Navbar() {
                   {l.label}
                 </Link>
               ))}
+              <Link
+                href="/cart"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                Cart{cartCount > 0 ? ` (${cartCount})` : ''}
+              </Link>
+              <Link
+                href="/contact"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                Contact
+              </Link>
               <Link
                 href="/design"
                 onClick={() => setOpen(false)}

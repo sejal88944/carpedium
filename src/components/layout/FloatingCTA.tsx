@@ -16,7 +16,10 @@ export function FloatingCTA() {
         💬
       </a>
       </div>
-      <div className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-2 border-t border-black/10 bg-white/95 text-xs font-bold shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-void/95 md:hidden">
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-2 border-t border-black/10 bg-white/95 text-xs font-bold shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-void/95 md:hidden"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+      >
         <a
           href={`https://wa.me/${COMPANY.whatsapp}?text=${encodeURIComponent(`Hi ${COMPANY.shortName}, I need custom T-shirt printing`)}`}
           target="_blank"

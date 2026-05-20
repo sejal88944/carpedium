@@ -66,7 +66,7 @@ export function Footer() {
             <li>{COMPANY.phone}</li>
             <li>{COMPANY.email}</li>
             <li>{COMPANY.hours}</li>
-            <li>{COMPANY.locations.join(' · ')}</li>
+            <li className="break-words">{COMPANY.locations.join(' · ')}</li>
             <li>
               <a
                 href={COMPANY.instagram}

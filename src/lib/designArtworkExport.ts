@@ -662,20 +662,14 @@ export function compressArtworkForCartStorage(
   })
 }
 
-export function downloadDataUrl(dataUrl: string, filename: string) {
+export async function downloadDataUrl(dataUrl: string, filename: string) {
   if (typeof document === 'undefined') return
-  const a = document.createElement('a')
-  a.href = dataUrl
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+  const { downloadDataUrlFile } = await import('@/lib/downloadFile')
+  await downloadDataUrlFile(dataUrl, filename)
 }
 
-export function downloadJson(data: unknown, filename: string) {
+export async function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  downloadDataUrl(url, filename)
-  URL.revokeObjectURL(url)
+  const { downloadBlob } = await import('@/lib/downloadFile')
+  await downloadBlob(blob, filename)
 }

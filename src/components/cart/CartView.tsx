@@ -134,7 +134,73 @@ export function CartView() {
 
   /** Build cart PDF + open WhatsApp with full price details. Also records the order
    *  in the admin store and upserts the customer so the business has a paper trail. */
-  const handleOrderOnWhatsApp = () => {
+  const [pdfStatus, setPdfStatus] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  const cartPdfItems = () =>
+    items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      qty: i.qty,
+      price: i.price,
+      size: i.size,
+      color: i.color,
+      previewImage: i.previewImage,
+      slug: i.slug,
+      printArtwork: i.printArtwork,
+      printAspectRatio: i.printAspectRatio,
+      printArtworkWidthPx: i.printArtworkWidthPx,
+      printArtworkHeightPx: i.printArtworkHeightPx,
+      printWidthMm: i.printWidthMm,
+      printHeightMm: i.printHeightMm,
+    }))
+
+  const cartPdfMeta = (orderRef: string) => ({
+    subtotal,
+    discount: discount || undefined,
+    discountLabel:
+      discount && appliedCoupon ? `Discount (${appliedCoupon.coupon.code})` : undefined,
+    shipping,
+    total,
+    orderRef,
+    customerName: customerName.trim(),
+    customerPhone: customerPhone.trim(),
+    customerEmail: customerEmail.trim() || undefined,
+    customerAddress: customerAddress.trim() || undefined,
+  })
+
+  const handleDownloadPdf = async () => {
+    const name = customerName.trim()
+    const phone = customerPhone.trim()
+    const addr = customerAddress.trim()
+    if (!name || !phone) {
+      setCustomerError('Name ani phone tako — PDF sathi pan lagto.')
+      return
+    }
+    if (!addr) {
+      setCustomerError('Delivery address tako — PDF madhe disto.')
+      return
+    }
+    setCustomerError('')
+    setPdfLoading(true)
+    setPdfStatus(null)
+    try {
+      const code = `ORD-${Date.now().toString(36).toUpperCase()}`
+      const { fileName, download } = await downloadCartPdf(cartPdfItems(), cartPdfMeta(code))
+      if (download.openedInTab || download.shared) {
+        setPdfStatus('PDF ready — browser madhe Save / Share kara (phone).')
+      } else {
+        setPdfStatus(`Downloaded: ${fileName}`)
+      }
+    } catch (err) {
+      console.error('cart pdf download failed', err)
+      setPdfStatus('PDF download failed — parat try kara.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const handleOrderOnWhatsApp = async () => {
     const name = customerName.trim()
     const phone = customerPhone.trim()
     const email = customerEmail.trim()
@@ -172,32 +238,11 @@ export function CartView() {
     }
     let pdfFileName: string | undefined
     try {
-      pdfFileName = downloadCartPdf(
-        items.map((i) => ({
-          id: i.id,
-          title: i.title,
-          qty: i.qty,
-          price: i.price,
-          size: i.size,
-          color: i.color,
-          previewImage: i.previewImage,
-          slug: i.slug,
-          printArtwork: i.printArtwork,
-          printAspectRatio: i.printAspectRatio,
-          printArtworkWidthPx: i.printArtworkWidthPx,
-          printArtworkHeightPx: i.printArtworkHeightPx,
-          printWidthMm: i.printWidthMm,
-          printHeightMm: i.printHeightMm,
-        })),
-        {
-          ...pricing,
-          orderRef: code,
-          customerName: name,
-          customerPhone: phone,
-          customerEmail: email || undefined,
-          customerAddress: addr || undefined,
-        },
-      )
+      const pdf = await downloadCartPdf(cartPdfItems(), cartPdfMeta(code))
+      pdfFileName = pdf.fileName
+      if (pdf.download.openedInTab || pdf.download.shared) {
+        setPdfStatus('PDF ready — browser madhe Save / Share kara (phone).')
+      }
     } catch (err) {
       console.error('cart pdf export failed', err)
     }
@@ -356,7 +401,7 @@ export function CartView() {
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 12, height: 0 }}
-                  className="glass glass-hover flex gap-4 overflow-hidden rounded-2xl p-4 md:gap-6 md:p-5"
+                  className="glass glass-hover flex flex-col gap-4 overflow-hidden rounded-2xl p-4 sm:flex-row sm:items-stretch md:gap-6 md:p-5"
                 >
                   <motion.div
                     whileHover={{ scale: 1.02 }}
@@ -385,7 +430,7 @@ export function CartView() {
                       </span>
                     ) : null}
                   </motion.div>
-                  <div className="flex min-w-0 flex-1 flex-col justify-between">
+                  <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
                     <div>
                       <h3 className="font-display text-lg font-bold leading-tight">{item.title}</h3>
                       <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
@@ -640,14 +685,28 @@ export function CartView() {
 
             <button
               type="button"
-              onClick={handleOrderOnWhatsApp}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] py-3.5 text-sm font-bold text-white shadow-glow transition hover:scale-[1.02]"
+              disabled={pdfLoading}
+              onClick={() => void handleDownloadPdf()}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border-2 border-brand bg-white py-3.5 text-sm font-bold text-brand transition hover:bg-brand/5 disabled:opacity-60 dark:bg-void-3"
+            >
+              {pdfLoading ? 'PDF tayar hot aahe…' : 'Download order PDF'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleOrderOnWhatsApp()}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] py-3.5 text-sm font-bold text-white shadow-glow transition hover:scale-[1.02]"
             >
               Order on WhatsApp
             </button>
-            <p className="mt-2 text-center text-[11px] text-slate-500 dark:text-zinc-500">
-              Order PDF download honaar · WhatsApp la full price details auto-fill hotil
-            </p>
+            {pdfStatus ? (
+              <p className="mt-2 text-center text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                {pdfStatus}
+              </p>
+            ) : (
+              <p className="mt-2 text-center text-[11px] text-slate-500 dark:text-zinc-500">
+                Phone var PDF download / Save — nantar WhatsApp order
+              </p>
+            )}
           </div>
         </aside>
       </motion.div>

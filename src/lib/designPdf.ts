@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { readPrintArtworkForCartItem } from '@/lib/designArtworkExport'
+import { pdfDataUri, savePdfFile, type DownloadResult } from '@/lib/downloadFile'
 import { COMPANY } from '@/data/brand'
 
 export type DesignPdfMeta = {
@@ -373,22 +374,20 @@ export type DesignPdfResult = {
   orderId: string
   /** Separate transparent PNG for admin / print shop. */
   printPngDataUrl?: string
+  download?: DownloadResult
 }
 
-export function downloadDesignPdf(meta: DesignPdfMeta, printPngDataUrl?: string): DesignPdfResult {
+export async function downloadDesignPdf(
+  meta: DesignPdfMeta,
+  printPngDataUrl?: string,
+): Promise<DesignPdfResult> {
   const orderId = meta.orderId || `ORD-${Date.now()}`
   const safe =
     meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'design'
   const fileName = `carpe-diem-invoice-${safe}-${Date.now()}.pdf`
   const pdf = buildDesignPdf({ ...meta, orderId })
-  pdf.save(fileName)
-  let dataUrl = ''
-  try {
-    dataUrl = pdf.output('datauristring')
-  } catch {
-    dataUrl = ''
-  }
-  return { fileName, dataUrl, orderId, printPngDataUrl }
+  const download = await savePdfFile(pdf, fileName)
+  return { fileName, dataUrl: pdfDataUri(pdf), orderId, printPngDataUrl, download }
 }
 
 // ── Cart / order-summary PDF ───────────────────────────────────────────────
@@ -691,9 +690,12 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
   return pdf
 }
 
-export function downloadCartPdf(items: CartPdfItem[], meta: CartPdfMeta): string {
+export async function downloadCartPdf(
+  items: CartPdfItem[],
+  meta: CartPdfMeta,
+): Promise<{ fileName: string; download: DownloadResult }> {
   const fileName = `carpe-diem-cart-${Date.now()}.pdf`
   const pdf = buildCartPdf(items, meta)
-  pdf.save(fileName)
-  return fileName
+  const download = await savePdfFile(pdf, fileName)
+  return { fileName, download }
 }

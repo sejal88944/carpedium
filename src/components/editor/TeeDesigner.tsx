@@ -978,7 +978,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
 
     if (printArtwork.startsWith('data:')) {
       try {
-        const result = downloadDesignPdf(
+        const result = await downloadDesignPdf(
           {
             title: item.title,
             color: item.color,
@@ -1008,7 +1008,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
         pdfFileName = result.fileName
         pdfDataUrl = result.dataUrl
         if (printArtwork.startsWith('data:')) {
-          downloadDataUrl(printArtwork, `carpe-diem-print-artwork-${orderId}.png`)
+          await downloadDataUrl(printArtwork, `carpe-diem-print-artwork-${orderId}.png`)
         }
       } catch (err) {
         console.error('pdf export failed', err)
@@ -1139,8 +1139,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
   )
 
   return (
-    <div className="grid gap-10 xl:grid-cols-[1.2fr_0.8fr]">
-      <section className="min-h-[700px] rounded-[2.25rem] border border-black/5 bg-gradient-to-br from-slate-50 via-white to-slate-200 p-4 shadow-2xl dark:border-white/10 dark:from-zinc-950 dark:via-void-2 dark:to-slate-900 md:p-8">
+    <div className="grid gap-8 lg:gap-10 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="min-h-0 rounded-[1.5rem] border border-black/5 bg-gradient-to-br from-slate-50 via-white to-slate-200 p-3 shadow-2xl dark:border-white/10 dark:from-zinc-950 dark:via-void-2 dark:to-slate-900 sm:rounded-[2.25rem] sm:p-6 md:p-8 lg:min-h-[520px]">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-brand">
@@ -1169,7 +1169,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           </p>
         ) : null}
 
-        <div className="group relative mx-auto flex min-h-[590px] max-w-3xl items-center justify-center overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.96),rgba(226,232,240,0.8))] p-4 transition hover:scale-[1.005] dark:bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.8),rgba(9,9,11,0.96))]">
+        <div className="group relative mx-auto flex w-full min-h-[min(70vw,420px)] max-w-full items-center justify-center overflow-hidden rounded-[1.25rem] bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.96),rgba(226,232,240,0.8))] p-2 transition sm:min-h-[480px] sm:max-w-3xl sm:rounded-[2rem] sm:p-4 dark:bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.8),rgba(9,9,11,0.96))]">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
           <div
             ref={gridNoticeRef}
@@ -1177,10 +1177,10 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           >
             Grid helper active · snap alignment enabled
           </div>
-          <canvas ref={ref} className="relative z-10 h-auto max-w-full drop-shadow-2xl" />
+          <canvas ref={ref} className="relative z-10 mx-auto h-auto w-full max-w-[min(100%,560px)] drop-shadow-2xl" />
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-[1fr_220px]">
+        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_220px]">
           <p className="rounded-2xl bg-white/70 p-4 text-sm text-slate-600 shadow-sm dark:bg-white/5 dark:text-zinc-400">
             Upload केलेला photo/logo chest area मध्ये auto-center होतो. Drag, resize, rotate करा.
             Boundary restriction आणि snap alignment print area मध्ये मदत करतात.
@@ -1442,7 +1442,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
                   Font color presets
                 </p>
-                <div className="mt-3 grid grid-cols-6 gap-2">
+                <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
                   {TEXT_COLOR_PRESETS.map((c) => (
                     <button
                       key={c}

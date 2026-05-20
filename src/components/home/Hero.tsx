@@ -80,7 +80,7 @@ export function Hero() {
           initial={{ opacity: 0, scale: 0.92, rotate: -2 }}
           animate={{ opacity: 1, scale: 1, rotate: 0 }}
           transition={{ delay: 0.25 }}
-          className="relative min-h-[420px]"
+          className="relative min-h-[280px] sm:min-h-[360px] lg:min-h-[420px]"
         >
           <motion.div
             className="absolute left-0 top-8 w-40 rounded-3xl border border-white/15 bg-white/10 p-2 backdrop-blur-xl md:w-48"
