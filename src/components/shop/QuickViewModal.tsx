@@ -95,8 +95,8 @@ export function QuickViewModal({ product, onClose }: { product: Product; onClose
                     onClick={() => setColorIdx(i)}
                     className={`h-8 w-8 rounded-full border-2 transition ${
                       colorIdx === i
-                        ? 'scale-110 border-brand shadow-[0_0_0_4px_rgba(14,165,233,0.18)]'
-                        : 'border-white/60 hover:scale-105'
+                        ? 'scale-110 border-2 border-brand shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_0_0_4px_rgba(14,165,233,0.2)]'
+                        : 'border-black/65 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] hover:scale-105 hover:border-black dark:border-white/55 dark:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.3)] dark:hover:border-white'
                     }`}
                     style={{ backgroundColor: c.hex }}
                   />

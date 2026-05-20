@@ -165,8 +165,10 @@ export function ProductListing() {
               type="button"
               onClick={() => setColorId(c.id)}
               title={c.name}
-              className={`h-8 w-8 rounded-full border-2 ${
-                colorId === c.id ? 'border-brand scale-110' : 'border-transparent'
+              className={`h-8 w-8 rounded-full border-2 transition ${
+                colorId === c.id
+                  ? 'scale-110 border-2 border-brand shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_0_0_6px_rgba(14,165,233,0.2)]'
+                  : 'border-black/65 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] hover:border-black dark:border-white/55 dark:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.3)] dark:hover:border-white'
               }`}
               style={{ backgroundColor: c.hex }}
             />
