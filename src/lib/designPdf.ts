@@ -196,11 +196,20 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
   const sub =
     meta.title && meta.title.length < 48
       ? meta.title
-      : 'Text · emoji · logo — exact design from cart'
+      : 'Logo · text · emoji in one row'
   pdf.text(sub, pageW - margin, 13, { align: 'right' })
 
   const footerH = 28
-  const artTop = 24
+  const artTop = 30
+  const sectionLabelY = 22
+  pdf.setTextColor(51, 65, 85)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10)
+  pdf.text('CUSTOM DESIGN SECTION', margin, sectionLabelY)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('Logo, text and emoji side by side — same order as on the tee', margin + 2, sectionLabelY + 5)
   const artBottom = pageH - footerH
   const artMaxW = pageW - margin * 2
   const artMaxH = artBottom - artTop

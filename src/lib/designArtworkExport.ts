@@ -151,6 +151,127 @@ function upscaleForPrint(dataUrl: string, minLongEdge = PRINT_EXPORT_MIN_LONG_ED
   })
 }
 
+function isLightFill(fill: unknown): boolean {
+  if (typeof fill !== 'string' || !fill.startsWith('#')) return false
+  const clean = fill.replace('#', '')
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.72
+}
+
+function sortObjectsForPrintRow(objects: FabricObject[]): FabricObject[] {
+  const images: FabricObject[] = []
+  const texts: FabricObject[] = []
+  for (const o of objects) {
+    const meta = (o as UserObj).meta
+    if (meta === 'print') images.push(o)
+    else if (meta === 'user-text' || o.type === 'i-text' || o.type === 'text') texts.push(o)
+    else images.push(o)
+  }
+  const byLeft = (a: FabricObject, b: FabricObject) => {
+    a.setCoords()
+    b.setCoords()
+    return a.getBoundingRect().left - b.getBoundingRect().left
+  }
+  images.sort(byLeft)
+  texts.sort(byLeft)
+  return [...images, ...texts]
+}
+
+function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('img_load_failed'))
+    img.src = dataUrl
+  })
+}
+
+/**
+ * Page 2 layout: logo · text · emoji side-by-side in one clear section (not scattered on tee).
+ */
+async function composePrintRowSection(
+  fullDataUrl: string,
+  objects: FabricObject[],
+  multiplier: number,
+): Promise<{ dataUrl: string; widthPx: number; heightPx: number } | null> {
+  if (!fullDataUrl.startsWith('data:') || objects.length === 0) return null
+
+  const fullImg = await loadImage(fullDataUrl)
+  const gap = Math.round(28 * (multiplier / 4))
+  const maxCellH = Math.round(320 * (multiplier / 4))
+  const pieces: Array<{ img: HTMLImageElement; w: number; h: number }> = []
+
+  for (const o of sortObjectsForPrintRow(objects)) {
+    o.setCoords()
+    const r = o.getBoundingRect()
+    if (r.width < 2 || r.height < 2) continue
+
+    const sx = Math.round(r.left * multiplier)
+    const sy = Math.round(r.top * multiplier)
+    const sw = Math.max(1, Math.round(r.width * multiplier))
+    const sh = Math.max(1, Math.round(r.height * multiplier))
+
+    const piece = document.createElement('canvas')
+    piece.width = sw
+    piece.height = sh
+    const pctx = piece.getContext('2d')
+    if (!pctx) continue
+    pctx.drawImage(fullImg, sx, sy, sw, sh, 0, 0, sw, sh)
+
+    const loaded = await loadImage(piece.toDataURL('image/png'))
+    let dw = loaded.naturalWidth
+    let dh = loaded.naturalHeight
+    if (dh > maxCellH) {
+      const s = maxCellH / dh
+      dw = Math.round(dw * s)
+      dh = maxCellH
+    }
+    pieces.push({ img: loaded, w: dw, h: dh })
+  }
+
+  if (pieces.length === 0) return null
+
+  const rowW = pieces.reduce((s, p, i) => s + p.w + (i ? gap : 0), 0)
+  const rowH = Math.max(...pieces.map((p) => p.h))
+  const pad = Math.round(36 * (multiplier / 4))
+  const outW = rowW + pad * 2
+  const outH = rowH + pad * 2
+
+  const out = document.createElement('canvas')
+  out.width = outW
+  out.height = outH
+  const ctx = out.getContext('2d')
+  if (!ctx) return null
+
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, outW, outH)
+  ctx.strokeStyle = '#cbd5e1'
+  ctx.lineWidth = Math.max(2, Math.round(2 * (multiplier / 4)))
+  ctx.strokeRect(1, 1, outW - 2, outH - 2)
+
+  let x = pad
+  const midY = outH / 2
+  for (const p of pieces) {
+    const y = midY - p.h / 2
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(p.img, x, y, p.w, p.h)
+    x += p.w + gap
+  }
+
+  const dataUrl = out.toDataURL('image/png')
+  return { dataUrl, widthPx: outW, heightPx: outH }
+}
+
 function compositeOnBackground(pngDataUrl: string, bgHex: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
@@ -196,6 +317,7 @@ export async function exportArtworkFromFabric(
     o: FabricObject
     gco: GlobalCompositeOperation
     opacity: number
+    fill?: unknown
   }> = []
 
   const userOnSide = canvas.getObjects().filter((o) => isUserDesignObject(o, opts.activeSide))
@@ -218,12 +340,17 @@ export async function exportArtworkFromFabric(
       o.set('visible', false)
       return
     }
+    const prevFill = (o as { fill?: unknown }).fill
     blendSnap.push({
       o,
       gco: (o.globalCompositeOperation as GlobalCompositeOperation) || 'source-over',
       opacity: typeof o.opacity === 'number' ? o.opacity : 1,
+      fill: prevFill,
     })
     o.set({ globalCompositeOperation: 'source-over', opacity: 1 })
+    if (meta === 'user-text' && isLightFill(prevFill)) {
+      o.set({ fill: '#0f172a' })
+    }
   })
 
   const prevBg = canvas.backgroundColor ?? 'transparent'
@@ -248,7 +375,14 @@ export async function exportArtworkFromFabric(
     }
   }
 
-  blendSnap.forEach(({ o, gco, opacity }) => o.set({ globalCompositeOperation: gco, opacity }))
+  blendSnap.forEach(({ o, gco, opacity, fill }) => {
+    const patch: { globalCompositeOperation: GlobalCompositeOperation; opacity: number; fill?: unknown } = {
+      globalCompositeOperation: gco,
+      opacity,
+    }
+    if (fill !== undefined) patch.fill = fill
+    o.set(patch)
+  })
   visSnap.forEach(({ o, vis }) => o.set('visible', vis))
   canvas.backgroundColor = prevBg
   canvas.requestRenderAll()
@@ -262,16 +396,15 @@ export async function exportArtworkFromFabric(
 
   let transparentPng = await upscaleForPrint(transparentCrop.dataUrl)
   const flatPrintPng = await upscaleForPrint(flatCrop.dataUrl)
-  const printSheetPng = await compositeOnBackground(transparentPng, '#ffffff')
 
-  const trimmedImg = await new Promise<HTMLImageElement>((res) => {
-    const im = new Image()
-    im.onload = () => res(im)
-    im.onerror = () => res(new Image())
-    im.src = transparentPng
-  })
-  const tw = trimmedImg.naturalWidth || transparentCrop.widthPx
-  const th = trimmedImg.naturalHeight || transparentCrop.heightPx
+  const rowSection = await composePrintRowSection(transparentFull, userOnSide, m)
+  let printSheetPng = rowSection
+    ? await upscaleForPrint(rowSection.dataUrl)
+    : await compositeOnBackground(transparentPng, '#ffffff')
+
+  const sheetImg = await loadImage(printSheetPng).catch(() => null)
+  const tw = sheetImg?.naturalWidth || rowSection?.widthPx || transparentCrop.widthPx
+  const th = sheetImg?.naturalHeight || rowSection?.heightPx || transparentCrop.heightPx
 
   const mmPerPx = CHEST_PRINT_WIDTH_MM / cropRegion.width
   const printWidthMm = Math.round(cropRegion.width * mmPerPx)
@@ -308,7 +441,10 @@ export async function exportArtworkFromFabric(
     heightPx: th,
     printWidthMm,
     printHeightMm,
-    aspectRatio: tw / Math.max(1, th),
+    aspectRatio:
+      rowSection && rowSection.widthPx > 0
+        ? rowSection.widthPx / rowSection.heightPx
+        : tw / Math.max(1, th),
     designJson,
     hasArtwork: true,
   }
