@@ -23,8 +23,65 @@ export type DesignPdfMeta = {
   artworkWidthPx?: number
   artworkHeightPx?: number
   printAspectRatio?: number
-  /** Custom text to print (shown as readable text on page 2). */
   designText?: string
+  /** T-shirt mockup for page 1 — where logo / text / emoji are placed. */
+  mockupPreviewUrl?: string
+}
+
+const MOCKUP_ASPECT = 560 / 700
+
+function embedImageInBox(
+  pdf: jsPDF,
+  dataUrl: string,
+  x: number,
+  y: number,
+  maxW: number,
+  maxH: number,
+): boolean {
+  if (!dataUrl.startsWith('data:image/')) return false
+  const fmt: 'PNG' | 'JPEG' = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
+  let dw = maxW
+  let dh = dw / MOCKUP_ASPECT
+  if (dh > maxH) {
+    dh = maxH
+    dw = dh * MOCKUP_ASPECT
+  }
+  const ix = x + (maxW - dw) / 2
+  try {
+    pdf.addImage(dataUrl, fmt, ix, y, dw, dh, undefined, 'SLOW')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Page 1 — DESIGN ON T-SHIRT mockup (cart / invoice). */
+function drawMockupPlacementBlock(
+  pdf: jsPDF,
+  mockupUrl: string,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number,
+): number {
+  pdf.setFillColor(248, 250, 252)
+  pdf.setDrawColor(203, 213, 225)
+  pdf.roundedRect(x, y, boxW, boxH, 2, 2, 'FD')
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(11)
+  pdf.setTextColor(51, 65, 85)
+  pdf.text('DESIGN ON T-SHIRT', x + boxW / 2, y + 8, { align: 'center' })
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('Exact placement — logo, text & emoji', x + boxW / 2, y + 14, { align: 'center' })
+
+  const pad = 6
+  const imgMaxW = boxW - pad * 2
+  const imgMaxH = boxH - 22
+  embedImageInBox(pdf, mockupUrl, x + pad, y + 18, imgMaxW, imgMaxH)
+  return y + boxH
 }
 
 function extractDesignTextFromTitle(title: string): string | undefined {
@@ -150,6 +207,11 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
   ]
   y = panel('CUSTOMER DETAILS', clientRows, y)
 
+  if (meta.mockupPreviewUrl?.startsWith('data:image/')) {
+    const boxH = 88
+    y = drawMockupPlacementBlock(pdf, meta.mockupPreviewUrl, margin, y + 4, innerW, boxH) + 8
+  }
+
   if (meta.notes?.trim()) {
     const noteLines = pdf.splitTextToSize(meta.notes.trim(), innerW - 8)
     const noteH = 14 + noteLines.length * 4.5
@@ -175,7 +237,9 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
   pdf.setFontSize(8)
   pdf.setTextColor(100, 116, 139)
   pdf.text(
-    'Page 2 contains print-ready artwork for direct printing.',
+    meta.mockupPreviewUrl
+      ? 'Page 1: design on T-shirt. Page 2: print file (image · text · emoji in a row).'
+      : 'Page 2 contains print-ready artwork for direct printing.',
     margin,
     Math.min(y + 4, pageH - 28),
     { maxWidth: innerW },
@@ -444,7 +508,19 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
     y += 2
   }
 
-  if (y > pageH - 95) {
+  const mockupPreview = items.find((it) => it.previewImage?.startsWith('data:image/'))
+    ?.previewImage
+  if (mockupPreview) {
+    if (y + 98 > pageH - 70) {
+      footer()
+      pdf.addPage()
+      header()
+      y = 32
+    }
+    y = drawMockupPlacementBlock(pdf, mockupPreview, margin, y + 6, usableW, 92) + 10
+  }
+
+  if (y > pageH - 55) {
     footer()
     pdf.addPage()
     header()

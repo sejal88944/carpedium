@@ -167,6 +167,37 @@ function isLightFill(fill: unknown): boolean {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.72
 }
 
+function splitTrailingEmoji(text: string): { body: string; emoji: string } {
+  const m = text.match(/^([\s\S]*?)(\p{Extended_Pictographic}+)$/u)
+  if (m && m[1].trim().length > 0) return { body: m[1].trimEnd(), emoji: m[2] }
+  return { body: text, emoji: '' }
+}
+
+function cropPieceFromFull(
+  fullImg: HTMLImageElement,
+  multiplier: number,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): Promise<{ img: HTMLImageElement; w: number; h: number } | null> {
+  const sx = Math.round(left * multiplier)
+  const sy = Math.round(top * multiplier)
+  const sw = Math.max(1, Math.round(width * multiplier))
+  const sh = Math.max(1, Math.round(height * multiplier))
+  const piece = document.createElement('canvas')
+  piece.width = sw
+  piece.height = sh
+  const pctx = piece.getContext('2d')
+  if (!pctx) return Promise.resolve(null)
+  pctx.drawImage(fullImg, sx, sy, sw, sh, 0, 0, sw, sh)
+  return loadImage(piece.toDataURL('image/png')).then((loaded) => ({
+    img: loaded,
+    w: loaded.naturalWidth,
+    h: loaded.naturalHeight,
+  }))
+}
+
 function sortObjectsForPrintRow(objects: FabricObject[]): FabricObject[] {
   const images: FabricObject[] = []
   const texts: FabricObject[] = []
@@ -216,20 +247,44 @@ async function composePrintRowSection(
     const r = o.getBoundingRect()
     if (r.width < 2 || r.height < 2) continue
 
-    const sx = Math.round(r.left * multiplier)
-    const sy = Math.round(r.top * multiplier)
-    const sw = Math.max(1, Math.round(r.width * multiplier))
-    const sh = Math.max(1, Math.round(r.height * multiplier))
+    const meta = (o as UserObj).meta
+    const isText =
+      meta === 'user-text' || o.type === 'i-text' || o.type === 'text' || o.type === 'textbox'
+    const textContent =
+      isText && typeof (o as { text?: string }).text === 'string'
+        ? (o as { text: string }).text
+        : ''
 
-    const piece = document.createElement('canvas')
-    piece.width = sw
-    piece.height = sh
-    const pctx = piece.getContext('2d')
-    if (!pctx) continue
-    pctx.drawImage(fullImg, sx, sy, sw, sh, 0, 0, sw, sh)
+    if (isText && textContent) {
+      const { body, emoji } = splitTrailingEmoji(textContent)
+      if (emoji && body) {
+        const emojiFrac = Math.min(0.32, 0.1 * emoji.length + 0.12)
+        const emojiW = r.width * emojiFrac
+        const textW = r.width - emojiW
+        const textPiece = await cropPieceFromFull(
+          fullImg,
+          multiplier,
+          r.left,
+          r.top,
+          textW,
+          r.height,
+        )
+        const emojiPiece = await cropPieceFromFull(
+          fullImg,
+          multiplier,
+          r.left + textW,
+          r.top,
+          emojiW,
+          r.height,
+        )
+        if (textPiece) raw.push(textPiece)
+        if (emojiPiece) raw.push(emojiPiece)
+        continue
+      }
+    }
 
-    const loaded = await loadImage(piece.toDataURL('image/png'))
-    raw.push({ img: loaded, w: loaded.naturalWidth, h: loaded.naturalHeight })
+    const piece = await cropPieceFromFull(fullImg, multiplier, r.left, r.top, r.width, r.height)
+    if (piece) raw.push(piece)
   }
 
   if (raw.length === 0) return null
@@ -259,6 +314,12 @@ async function composePrintRowSection(
 
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, outW, outH)
+  ctx.strokeStyle = '#94a3b8'
+  ctx.lineWidth = 1.5
+  ctx.strokeRect(1.5, 1.5, outW - 3, outH - 3)
+  ctx.strokeStyle = '#cbd5e1'
+  ctx.lineWidth = 0.75
+  ctx.strokeRect(4, 4, outW - 8, outH - 8)
 
   let x = pad
   const midY = outH / 2
