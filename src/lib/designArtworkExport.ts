@@ -13,11 +13,8 @@ export type DesignLayerJson = {
 }
 
 export type ArtworkExportResult = {
-  /** Transparent PNG — artwork only. */
   transparentPng: string
-  /** Tee-colour fill behind artwork (same crop). */
   flatPrintPng: string
-  /** White background — clearest for PDF page 2 & office printers. */
   printSheetPng: string
   widthPx: number
   heightPx: number
@@ -29,6 +26,9 @@ export type ArtworkExportResult = {
 }
 
 const CHEST_PRINT_WIDTH_MM = 300
+/** Long edge target before PDF embed (sharp text / logo / emoji). */
+const PRINT_EXPORT_MIN_LONG_EDGE = 1800
+const EXPORT_MULTIPLIER = 6
 
 type UserObj = FabricObject & { meta?: string; printSide?: 'front' | 'back' }
 
@@ -41,6 +41,46 @@ function isUserDesignObject(o: FabricObject, activeSide: 'front' | 'back') {
   if (isHelper(meta)) return false
   const ps = (o as UserObj).printSide
   return !ps || ps === activeSide
+}
+
+/** Union of all design objects (logo, text, emoji) on canvas. */
+function unionObjectBounds(objects: FabricObject[], padding = 20): PrintRegion | null {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+
+  for (const o of objects) {
+    o.setCoords()
+    const r = o.getBoundingRect()
+    if (!r.width || !r.height) continue
+    minX = Math.min(minX, r.left)
+    minY = Math.min(minY, r.top)
+    maxX = Math.max(maxX, r.left + r.width)
+    maxY = Math.max(maxY, r.top + r.height)
+  }
+
+  if (!Number.isFinite(minX)) return null
+
+  return {
+    left: minX - padding,
+    top: minY - padding,
+    width: maxX - minX + padding * 2,
+    height: maxY - minY + padding * 2,
+  }
+}
+
+function intersectBounds(a: PrintRegion, b: PrintRegion): PrintRegion {
+  const left = Math.max(a.left, b.left)
+  const top = Math.max(a.top, b.top)
+  const right = Math.min(a.left + a.width, b.left + b.width)
+  const bottom = Math.min(a.top + a.height, b.top + b.height)
+  return {
+    left,
+    top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top),
+  }
 }
 
 function cropDataUrl(
@@ -58,8 +98,8 @@ function cropDataUrl(
         const sh = Math.max(1, Math.round(region.height * multiplier))
         const capW = img.naturalWidth || img.width
         const capH = img.naturalHeight || img.height
-        const sx2 = Math.min(sx, Math.max(0, capW - 1))
-        const sy2 = Math.min(sy, Math.max(0, capH - 1))
+        const sx2 = Math.min(Math.max(0, sx), Math.max(0, capW - 1))
+        const sy2 = Math.min(Math.max(0, sy), Math.max(0, capH - 1))
         const sw2 = Math.min(sw, capW - sx2)
         const sh2 = Math.min(sh, capH - sy2)
         const out = document.createElement('canvas')
@@ -67,6 +107,8 @@ function cropDataUrl(
         out.height = sh2
         const ctx = out.getContext('2d')
         if (!ctx) return resolve({ dataUrl, widthPx: sw2, heightPx: sh2 })
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
         ctx.drawImage(img, sx2, sy2, sw2, sh2, 0, 0, sw2, sh2)
         resolve({ dataUrl: out.toDataURL('image/png'), widthPx: sw2, heightPx: sh2 })
       } catch {
@@ -78,51 +120,28 @@ function cropDataUrl(
   })
 }
 
-/** Crop to pixels that have visible ink — design fills page 2 larger & clearer. */
-function trimToContentBounds(dataUrl: string, paddingPx = 12): Promise<string> {
+/** Scale up so PDF page 2 shows large, sharp artwork. */
+function upscaleForPrint(dataUrl: string, minLongEdge = PRINT_EXPORT_MIN_LONG_EDGE): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
       try {
-        const w = img.naturalWidth || img.width
-        const h = img.naturalHeight || img.height
+        const iw = img.naturalWidth || img.width
+        const ih = img.naturalHeight || img.height
+        const long = Math.max(iw, ih)
+        if (long >= minLongEdge) return resolve(dataUrl)
+        const scale = minLongEdge / long
+        const w = Math.max(1, Math.round(iw * scale))
+        const h = Math.max(1, Math.round(ih * scale))
         const c = document.createElement('canvas')
         c.width = w
         c.height = h
-        const ctx = c.getContext('2d', { willReadFrequently: true })
+        const ctx = c.getContext('2d')
         if (!ctx) return resolve(dataUrl)
-        ctx.drawImage(img, 0, 0)
-        const { data } = ctx.getImageData(0, 0, w, h)
-        let minX = w
-        let minY = h
-        let maxX = 0
-        let maxY = 0
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            const a = data[(y * w + x) * 4 + 3]
-            if (a > 12) {
-              if (x < minX) minX = x
-              if (y < minY) minY = y
-              if (x > maxX) maxX = x
-              if (y > maxY) maxY = y
-            }
-          }
-        }
-        if (maxX <= minX || maxY <= minY) return resolve(dataUrl)
-        const pad = paddingPx
-        minX = Math.max(0, minX - pad)
-        minY = Math.max(0, minY - pad)
-        maxX = Math.min(w - 1, maxX + pad)
-        maxY = Math.min(h - 1, maxY + pad)
-        const tw = maxX - minX + 1
-        const th = maxY - minY + 1
-        const out = document.createElement('canvas')
-        out.width = tw
-        out.height = th
-        const octx = out.getContext('2d')
-        if (!octx) return resolve(dataUrl)
-        octx.drawImage(c, minX, minY, tw, th, 0, 0, tw, th)
-        resolve(out.toDataURL('image/png'))
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(c.toDataURL('image/png'))
       } catch {
         resolve(dataUrl)
       }
@@ -145,6 +164,8 @@ function compositeOnBackground(pngDataUrl: string, bgHex: string): Promise<strin
       if (!ctx) return resolve(pngDataUrl)
       ctx.fillStyle = bgHex
       ctx.fillRect(0, 0, w, h)
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
       ctx.drawImage(img, 0, 0)
       resolve(c.toDataURL('image/png'))
     }
@@ -154,8 +175,7 @@ function compositeOnBackground(pngDataUrl: string, bgHex: string): Promise<strin
 }
 
 /**
- * Export logo + text + emoji exactly as placed on the tee (no mockup).
- * Resets blend modes so PDF/PNG match what the user sees.
+ * Export logo + text + emoji — tight crop around objects, high resolution for PDF.
  */
 export async function exportArtworkFromFabric(
   canvas: Canvas,
@@ -170,7 +190,7 @@ export async function exportArtworkFromFabric(
 ): Promise<ArtworkExportResult | null> {
   if (typeof document === 'undefined') return null
 
-  const m = opts.multiplier ?? 4
+  const m = opts.multiplier ?? EXPORT_MULTIPLIER
   const visSnap: Array<{ o: FabricObject; vis: boolean }> = []
   const blendSnap: Array<{
     o: FabricObject
@@ -179,7 +199,12 @@ export async function exportArtworkFromFabric(
   }> = []
 
   const userOnSide = canvas.getObjects().filter((o) => isUserDesignObject(o, opts.activeSide))
-  const hasArtwork = userOnSide.length > 0
+  if (userOnSide.length === 0) return null
+
+  const rawBounds = unionObjectBounds(userOnSide, 24)
+  const cropRegion = rawBounds
+    ? intersectBounds(rawBounds, opts.printRegion)
+    : opts.printRegion
 
   canvas.getObjects().forEach((o) => {
     const meta = (o as UserObj).meta
@@ -228,15 +253,15 @@ export async function exportArtworkFromFabric(
   canvas.backgroundColor = prevBg
   canvas.requestRenderAll()
 
-  if (!transparentFull.startsWith('data:') || !hasArtwork) return null
+  if (!transparentFull.startsWith('data:')) return null
 
-  const transparentCrop = await cropDataUrl(transparentFull, opts.printRegion, m)
+  const transparentCrop = await cropDataUrl(transparentFull, cropRegion, m)
   const flatCrop = flatFull.startsWith('data:')
-    ? await cropDataUrl(flatFull, opts.printRegion, m)
+    ? await cropDataUrl(flatFull, cropRegion, m)
     : transparentCrop
 
-  let transparentPng = await trimToContentBounds(transparentCrop.dataUrl, 16)
-  const flatPrintPng = await trimToContentBounds(flatCrop.dataUrl, 16)
+  let transparentPng = await upscaleForPrint(transparentCrop.dataUrl)
+  const flatPrintPng = await upscaleForPrint(flatCrop.dataUrl)
   const printSheetPng = await compositeOnBackground(transparentPng, '#ffffff')
 
   const trimmedImg = await new Promise<HTMLImageElement>((res) => {
@@ -248,9 +273,9 @@ export async function exportArtworkFromFabric(
   const tw = trimmedImg.naturalWidth || transparentCrop.widthPx
   const th = trimmedImg.naturalHeight || transparentCrop.heightPx
 
-  const mmPerPx = CHEST_PRINT_WIDTH_MM / opts.printRegion.width
-  const printWidthMm = Math.round(opts.printRegion.width * mmPerPx)
-  const printHeightMm = Math.round(opts.printRegion.height * mmPerPx)
+  const mmPerPx = CHEST_PRINT_WIDTH_MM / cropRegion.width
+  const printWidthMm = Math.round(cropRegion.width * mmPerPx)
+  const printHeightMm = Math.round(cropRegion.height * mmPerPx)
 
   const objects: Array<Record<string, unknown>> = []
   for (const o of userOnSide) {
@@ -291,13 +316,12 @@ export async function exportArtworkFromFabric(
 
 const PRINT_ARTWORK_SESSION_PREFIX = 'aasha-print-artwork:'
 
-/** Full-quality artwork for cart PDF (same browser session). */
 export function stashPrintArtworkForCartItem(cartItemId: string, dataUrl: string) {
   if (typeof window === 'undefined' || !dataUrl.startsWith('data:')) return
   try {
     sessionStorage.setItem(`${PRINT_ARTWORK_SESSION_PREFIX}${cartItemId}`, dataUrl)
   } catch {
-    /* quota — cart item may still carry compressed printArtwork */
+    /* quota */
   }
 }
 
@@ -311,11 +335,10 @@ export function readPrintArtworkForCartItem(cartItemId: string): string | null {
   }
 }
 
-/** JPEG downscale for cart localStorage (keeps print readable in PDF page 2). */
+/** PNG for cart — sharper than JPEG for signatures & emoji. */
 export function compressArtworkForCartStorage(
   dataUrl: string,
-  maxSide = 900,
-  quality = 0.88,
+  maxSide = 1400,
 ): Promise<string> {
   return new Promise((resolve) => {
     if (!dataUrl.startsWith('data:')) return resolve(dataUrl)
@@ -324,7 +347,8 @@ export function compressArtworkForCartStorage(
       try {
         const iw = img.naturalWidth || img.width
         const ih = img.naturalHeight || img.height
-        const scale = Math.min(1, maxSide / Math.max(iw, ih))
+        if (Math.max(iw, ih) <= maxSide) return resolve(dataUrl)
+        const scale = maxSide / Math.max(iw, ih)
         const w = Math.max(1, Math.round(iw * scale))
         const h = Math.max(1, Math.round(ih * scale))
         const c = document.createElement('canvas')
@@ -332,10 +356,12 @@ export function compressArtworkForCartStorage(
         c.height = h
         const ctx = c.getContext('2d')
         if (!ctx) return resolve(dataUrl)
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, w, h)
         ctx.drawImage(img, 0, 0, w, h)
-        resolve(c.toDataURL('image/jpeg', quality))
+        resolve(c.toDataURL('image/png'))
       } catch {
         resolve(dataUrl)
       }

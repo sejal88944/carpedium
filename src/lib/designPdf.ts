@@ -200,7 +200,7 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
   pdf.text(sub, pageW - margin, 13, { align: 'right' })
 
   const footerH = 28
-  const artTop = 26
+  const artTop = 24
   const artBottom = pageH - footerH
   const artMaxW = pageW - margin * 2
   const artMaxH = artBottom - artTop
@@ -212,10 +212,12 @@ function drawPrintReadyPage(pdf: jsPDF, meta: DesignPdfMeta) {
         ? meta.artworkWidthPx / meta.artworkHeightPx
         : 4 / 5
 
-  let dw = artMaxW
+  // Fill ~92% of printable area so design is large and readable on page 2
+  const fill = 0.92
+  let dw = artMaxW * fill
   let dh = dw / ar
-  if (dh > artMaxH) {
-    dh = artMaxH
+  if (dh > artMaxH * fill) {
+    dh = artMaxH * fill
     dw = dh * ar
   }
   const ix = (pageW - dw) / 2

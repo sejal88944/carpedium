@@ -904,7 +904,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           teeColorHex: color.hex,
           canvasWidth: W,
           canvasHeight: H,
-          multiplier: 4,
+          multiplier: 6,
         })
       } catch (e) {
         console.warn('artwork export failed', e)
@@ -938,7 +938,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     if (printArtwork.startsWith('data:')) {
       stashPrintArtworkForCartItem(cartItemId, printArtwork)
       try {
-        printArtworkForCart = await compressArtworkForCartStorage(printArtwork, 900, 0.88)
+        printArtworkForCart = await compressArtworkForCartStorage(printArtwork, 1400)
       } catch {
         printArtworkForCart = printArtwork
       }
