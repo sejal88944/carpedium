@@ -49,85 +49,187 @@ export function buildDesignPdf(imageDataUrl: string, meta: DesignPdfMeta): jsPDF
 
   pdf.setTextColor(15, 23, 42)
 
-  // Design preview area (centered, max 160mm wide, keep aspect 4:5)
+  const margin = 12
+  const innerW = pageW - 2 * margin
+  const labelCol = margin + 4
+  const valueX = margin + 44
+  const valueMaxW = pageW - valueX - margin - 4
+
+  const orderRows: Array<[string, string]> = [
+    ['Product', meta.title],
+    ['T-shirt colour', meta.color ?? '—'],
+    ['Size', meta.size ?? '—'],
+    ['Quantity', String(meta.quantity ?? 1)],
+    ['Unit price', meta.price ? `₹ ${meta.price.toLocaleString('en-IN')}` : '—'],
+    ['Line total', meta.price ? `₹ ${(meta.price * (meta.quantity ?? 1)).toLocaleString('en-IN')}` : '—'],
+  ]
+  const clientPairs: Array<[string, string]> = [
+    ['Full name', meta.customerName || '—'],
+    ['Phone / WhatsApp', meta.customerPhone || '—'],
+    ['Email', meta.customerEmail || '—'],
+    ['Delivery address', meta.customerAddress?.trim() || '—'],
+  ]
+
+  function drawPanel(yTop: number, heightMm: number) {
+    pdf.setFillColor(248, 250, 252)
+    pdf.setDrawColor(203, 213, 225)
+    pdf.setLineWidth(0.35)
+    pdf.roundedRect(margin, yTop, innerW, heightMm, 2, 2, 'FD')
+  }
+
+  /** Total vertical space for labelled rows when drawn at arbitrary Y. */
+  function pairsTotalHeight(pairs: Array<[string, string]>): number {
+    let sum = 0
+    pairs.forEach(([, val]) => {
+      const lines = pdf.splitTextToSize(val || '—', valueMaxW)
+      sum += Math.max(5.2, lines.length * 4.6)
+    })
+    return sum
+  }
+
+  function paintSectionHeading(yStart: number, title: string, subtitleLines: string[] | null) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10.5)
+    pdf.setTextColor(51, 65, 85)
+    pdf.text(title, margin + 4, yStart)
+
+    let y = yStart + 6
+    if (subtitleLines?.length) {
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7.5)
+      pdf.setTextColor(100, 116, 139)
+      subtitleLines.forEach((ln) => {
+        pdf.text(ln, margin + 4, y, { maxWidth: innerW - 8 })
+        y += 3.7
+      })
+    }
+    return y + 3
+  }
+
+  function paintKeyValueRows(yStart: number, pairs: Array<[string, string]>): number {
+    let cy = yStart
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pairs.forEach(([label, val]) => {
+      pdf.setTextColor(100, 116, 139)
+      pdf.text(label, labelCol, cy)
+      pdf.setTextColor(15, 23, 42)
+      const lines = pdf.splitTextToSize(val || '—', valueMaxW)
+      lines.forEach((line, li) => {
+        pdf.text(line, valueX, cy + li * 4.6)
+      })
+      cy += Math.max(5.2, lines.length * 4.6)
+    })
+    return cy
+  }
+
+  const footerReserve = 22
+  const safeBottom = pageH - footerReserve
+  const gap = 6
+  const aTop = 26
+
+  const headingA = 'A. CUSTOM T-SHIRT DESIGN (PRINT REFERENCE)'
+  const subA = [
+    'Isolated artwork preview for printers — placement, colours & scale reference.',
+    'Confirm final Hi-Res artwork over WhatsApp if this export is compressed.',
+  ]
+
+  const hasNotes = Boolean(meta.notes?.trim())
+  const noteLines = hasNotes ? pdf.splitTextToSize(meta.notes!.trim(), innerW - 8) : []
+
+  const imgW = 96
+  const framePad = 2.5
+  const hdrPadTopA = 6
+
+  /** First key/value row baseline = panelTop + this (see `paintSectionHeading(panelTop + 6, title, null)`). */
+  const PANEL_TO_FIRST_KV_ROW = 15
+  const PANEL_BOTTOM_PAD = 9
+
+  /** Matches `paintSectionHeading(aTop + hdrPadTopA, headingA, subA)` end Y before image frame. */
+  const sectionAHeaderBelowTop = hdrPadTopA + 6 + subA.length * 3.7 + 3
+
+  /** Row block for B/C panels */
+  function blockHeight(kvPairs: Array<[string, string]>): number {
+    return PANEL_TO_FIRST_KV_ROW + pairsTotalHeight(kvPairs) + PANEL_BOTTOM_PAD
+  }
+
+  function blockHeightNotes(): number {
+    if (!hasNotes) return 0
+    return PANEL_TO_FIRST_KV_ROW + noteLines.length * 4 + PANEL_BOTTOM_PAD
+  }
+
+  /** Returns bottom edge Y of composed page layout for a given drawable image height. */
+  function bottomEdge(imgDrawInnerH: number) {
+    const imageTop = aTop + sectionAHeaderBelowTop
+    const framedH = imgDrawInnerH + framePad * 2
+    const aBottom = imageTop + framedH + 8
+
+    let yPtr = aBottom + gap + blockHeight(orderRows)
+    yPtr += gap + blockHeight(clientPairs)
+    if (hasNotes) yPtr += gap + blockHeightNotes()
+    return yPtr
+  }
+
+  let imgDrawInnerH = 116
+  while (imgDrawInnerH >= 78 && bottomEdge(imgDrawInnerH) > safeBottom + 2) {
+    imgDrawInnerH -= 8
+  }
+
+  const imageTopFinal = aTop + sectionAHeaderBelowTop
+  const framedHFinal = imgDrawInnerH + framePad * 2
+  const aBottomFinal = imageTopFinal + framedHFinal + 8
+  const aHeightFinal = aBottomFinal - aTop
+
+  // ── A: design (own panel) ───────────────────────────────────────────────
+  drawPanel(aTop, aHeightFinal)
+  paintSectionHeading(aTop + hdrPadTopA, headingA, subA)
+
+  const imgX = (pageW - imgW) / 2
+  pdf.setDrawColor(148, 163, 184)
+  pdf.setLineWidth(0.4)
+  pdf.roundedRect(imgX - framePad, imageTopFinal, imgW + framePad * 2, framedHFinal, 2, 2, 'S')
+
   if (imageDataUrl && imageDataUrl.startsWith('data:image/')) {
-    const imgW = 140
-    const imgH = 175
-    const imgX = (pageW - imgW) / 2
-    const imgY = 36
-    pdf.setDrawColor(226, 232, 240)
-    pdf.setLineWidth(0.4)
-    pdf.roundedRect(imgX - 3, imgY - 3, imgW + 6, imgH + 6, 4, 4, 'S')
     const fmt: 'PNG' | 'JPEG' = imageDataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
     try {
-      pdf.addImage(imageDataUrl, fmt, imgX, imgY, imgW, imgH, undefined, 'FAST')
+      pdf.addImage(imageDataUrl, fmt, imgX, imageTopFinal + framePad, imgW, imgDrawInnerH, undefined, 'FAST')
     } catch {
-      // If addImage fails (rare CORS / format issue) just skip — meta still printed below.
+      pdf.setFont('helvetica', 'italic')
+      pdf.setFontSize(9)
+      pdf.setTextColor(148, 163, 184)
+      pdf.text('(Preview image could not be embedded.)', imgX, imageTopFinal + imgDrawInnerH / 2)
     }
   }
 
-  // Two-column meta block: Order details (left) + Customer details (right)
-  const metaY = 220
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(13)
-  pdf.text('Order Details', 18, metaY)
-  pdf.text('Customer', pageW / 2 + 4, metaY)
+  // ── B: order & product ───────────────────────────────────────────────────
+  const bTop = aBottomFinal + gap
+  const bH = blockHeight(orderRows)
+  drawPanel(bTop, bH)
+  const rowsBStart = paintSectionHeading(bTop + 6, 'B. ORDER & PRODUCT DETAILS', null)
+  paintKeyValueRows(rowsBStart, orderRows)
 
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(11)
-  const rows: Array<[string, string]> = [
-    ['Product', meta.title],
-    ['Color', meta.color ?? '—'],
-    ['Size', meta.size ?? '—'],
-    ['Quantity', String(meta.quantity ?? 1)],
-    ['Unit price', meta.price ? `Rs. ${meta.price}` : '—'],
-    ['Total', meta.price ? `Rs. ${(meta.price * (meta.quantity ?? 1)).toLocaleString('en-IN')}` : '—'],
-  ]
-  rows.forEach((r, i) => {
-    const y = metaY + 8 + i * 7
-    pdf.setTextColor(100, 116, 139)
-    pdf.text(r[0], 18, y)
-    pdf.setTextColor(15, 23, 42)
-    pdf.text(r[1], 50, y)
-  })
+  // ── C: client / delivery ─────────────────────────────────────────────────
+  const cTop = bTop + bH + gap
+  const cH = blockHeight(clientPairs)
+  drawPanel(cTop, cH)
+  const rowsCStart = paintSectionHeading(cTop + 6, 'C. CLIENT / DELIVERY DETAILS', null)
+  paintKeyValueRows(rowsCStart, clientPairs)
 
-  let customerCy = metaY + 8
-  const custLabelX = pageW / 2 + 4
-  const custValueX = pageW / 2 + 26
-  const custValueMaxW = pageW / 2 - 42
-  const simpleRows: Array<[string, string]> = [
-    ['Name', meta.customerName || '—'],
-    ['Phone', meta.customerPhone || '—'],
-    ['Email', meta.customerEmail || '—'],
-  ]
-  simpleRows.forEach((r) => {
-    pdf.setTextColor(100, 116, 139)
-    pdf.text(r[0], custLabelX, customerCy)
-    pdf.setTextColor(15, 23, 42)
-    pdf.text(r[1], custValueX, customerCy, { maxWidth: custValueMaxW })
-    customerCy += 7
-  })
-  pdf.setTextColor(100, 116, 139)
-  pdf.text('Address', custLabelX, customerCy)
-  pdf.setTextColor(15, 23, 42)
-  const addrVal = meta.customerAddress?.trim() || '—'
-  const addrLines =
-    addrVal === '—' ? ['—'] : pdf.splitTextToSize(addrVal, custValueMaxW)
-  addrLines.forEach((line, li) => {
-    pdf.text(line, custValueX, customerCy + li * 5)
-  })
-  customerCy += Math.max(7, addrLines.length * 5)
+  // ── D: design notes ──────────────────────────────────────────────────────
+  if (hasNotes) {
+    const dTop = cTop + cH + gap
+    const dH = blockHeightNotes()
+    drawPanel(dTop, dH)
+    let ny = paintSectionHeading(dTop + 6, 'D. DESIGN NOTES & INSTRUCTIONS', null)
 
-  const leftColBottom = metaY + 8 + rows.length * 7
-  const metaNotesY = Math.max(leftColBottom, customerCy) + 6
-
-  if (meta.notes) {
-    pdf.setTextColor(100, 116, 139)
+    pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(9)
-    pdf.text(`Notes: ${meta.notes}`, 18, metaNotesY, { maxWidth: pageW - 36 })
+    pdf.setTextColor(15, 23, 42)
+    noteLines.forEach((line) => {
+      pdf.text(line, margin + 4, ny)
+      ny += 4
+    })
   }
-
-  // Footer
   pdf.setDrawColor(226, 232, 240)
   pdf.line(12, pageH - 18, pageW - 12, pageH - 18)
   pdf.setTextColor(100, 116, 139)
