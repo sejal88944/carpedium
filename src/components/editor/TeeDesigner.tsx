@@ -995,6 +995,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             artworkWidthPx: artworkExport?.widthPx,
             artworkHeightPx: artworkExport?.heightPx,
             printAspectRatio: artworkExport?.aspectRatio ?? print.width / print.height,
+            mockupPreviewUrl:
+              hires?.startsWith('data:') ? hires : thumb?.startsWith('data:') ? thumb : undefined,
           },
           printArtwork,
         )

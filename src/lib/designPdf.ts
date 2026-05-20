@@ -23,6 +23,69 @@ export type DesignPdfMeta = {
   artworkWidthPx?: number
   artworkHeightPx?: number
   printAspectRatio?: number
+  /** Full T-shirt mockup — logo / text / emoji placement as the customer designed. */
+  mockupPreviewUrl?: string
+}
+
+const MOCKUP_ASPECT = 560 / 700
+
+function embedImageInBox(
+  pdf: jsPDF,
+  dataUrl: string,
+  x: number,
+  y: number,
+  maxW: number,
+  maxH: number,
+): { w: number; h: number } | null {
+  if (!dataUrl.startsWith('data:image/')) return null
+  const fmt: 'PNG' | 'JPEG' = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
+  let dw = maxW
+  let dh = dw / MOCKUP_ASPECT
+  if (dh > maxH) {
+    dh = maxH
+    dw = dh * MOCKUP_ASPECT
+  }
+  const ix = x + (maxW - dw) / 2
+  try {
+    pdf.addImage(dataUrl, fmt, ix, y, dw, dh, undefined, 'SLOW')
+    return { w: dw, h: dh }
+  } catch {
+    return null
+  }
+}
+
+function drawMockupPlacementBlock(
+  pdf: jsPDF,
+  mockupUrl: string,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number,
+): number {
+  pdf.setFillColor(248, 250, 252)
+  pdf.setDrawColor(203, 213, 225)
+  pdf.roundedRect(x, y, boxW, boxH, 2, 2, 'FD')
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10)
+  pdf.setTextColor(51, 65, 85)
+  pdf.text('DESIGN ON T-SHIRT', x + 4, y + 7)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7.5)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('Exact placement — logo, text & emoji', x + 4, y + 12)
+
+  const pad = 5
+  const imgMaxW = boxW - pad * 2
+  const imgMaxH = boxH - 20
+  const placed = embedImageInBox(pdf, mockupUrl, x + pad, y + 16, imgMaxW, imgMaxH)
+  if (!placed) {
+    pdf.setFont('helvetica', 'italic')
+    pdf.setFontSize(9)
+    pdf.setTextColor(148, 163, 184)
+    pdf.text('Preview unavailable', x + boxW / 2, y + boxH / 2, { align: 'center' })
+  }
+  return y + boxH
 }
 
 function formatOrderDate(iso?: string) {
@@ -44,9 +107,14 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
   const pageH = pdf.internal.pageSize.getHeight()
   const margin = 14
   const innerW = pageW - margin * 2
+  const hasMockup = meta.mockupPreviewUrl?.startsWith('data:image/') ?? false
+  const mockupBoxW = hasMockup ? 86 : 0
+  const mockupBoxH = hasMockup ? 118 : 0
+  const mockupX = pageW - margin - mockupBoxW
+  const colW = hasMockup ? mockupX - margin - 6 : innerW
   const labelX = margin + 2
-  const valueX = margin + 48
-  const valueMax = pageW - valueX - margin
+  const valueX = margin + 44
+  const valueMax = margin + colW - valueX - 2
 
   // Brand header
   pdf.setFillColor(14, 165, 233)
@@ -86,8 +154,13 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
   const orderId = meta.orderId || `ORD-${Date.now()}`
   pdf.text(`Order ID: ${orderId}`, margin + 4, y + 8)
   pdf.text(`Date: ${formatOrderDate(meta.orderDate)}`, margin + 4, y + 15)
-  pdf.text(`Print type: ${meta.printType || 'Custom DTG / Screen'}`, pageW / 2 + 4, y + 8)
+  pdf.text(`Print type: ${meta.printType || 'Custom DTG / Screen'}`, margin + colW / 2, y + 8)
   y += 30
+
+  const contentTop = y
+  if (hasMockup && meta.mockupPreviewUrl) {
+    drawMockupPlacementBlock(pdf, meta.mockupPreviewUrl, mockupX, contentTop, mockupBoxW, mockupBoxH)
+  }
 
   function panel(title: string, rows: Array<[string, string]>, startY: number): number {
     let cy = startY + 12
@@ -99,7 +172,7 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
 
     pdf.setFillColor(248, 250, 252)
     pdf.setDrawColor(203, 213, 225)
-    pdf.roundedRect(margin, startY, innerW, blockH, 2, 2, 'FD')
+    pdf.roundedRect(margin, startY, colW, blockH, 2, 2, 'FD')
 
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(11)
@@ -145,7 +218,7 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
     const noteH = 14 + noteLines.length * 4.5
     pdf.setFillColor(248, 250, 252)
     pdf.setDrawColor(203, 213, 225)
-    pdf.roundedRect(margin, y, innerW, noteH, 2, 2, 'FD')
+    pdf.roundedRect(margin, y, colW, noteH, 2, 2, 'FD')
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(11)
     pdf.setTextColor(51, 65, 85)
@@ -164,12 +237,12 @@ function drawInvoicePage(pdf: jsPDF, meta: DesignPdfMeta) {
   pdf.setFont('helvetica', 'italic')
   pdf.setFontSize(8)
   pdf.setTextColor(100, 116, 139)
-  pdf.text(
-    'Page 2 contains print-ready artwork only (no T-shirt mockup). Use for direct printing.',
-    margin,
-    Math.min(y + 4, pageH - 28),
-    { maxWidth: innerW },
-  )
+  const footNote = hasMockup
+    ? 'Page 1: design placement on T-shirt (right). Page 2: print-ready artwork for production.'
+    : 'Page 2 contains print-ready artwork for direct printing.'
+  pdf.text(footNote, margin, Math.min(Math.max(y + 4, contentTop + mockupBoxH + 4), pageH - 28), {
+    maxWidth: colW,
+  })
 
   pdf.setDrawColor(226, 232, 240)
   pdf.line(margin, pageH - 16, pageW - margin, pageH - 16)
@@ -448,6 +521,15 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
       y = lineY + 4
     }
     y += 2
+  }
+
+  const placementPreview = items.find((it) => it.previewImage?.startsWith('data:image/'))
+    ?.previewImage
+  if (placementPreview) {
+    const boxW = 92
+    const boxH = 108
+    const boxX = (pageW - boxW) / 2
+    y = drawMockupPlacementBlock(pdf, placementPreview, boxX, y + 6, boxW, boxH) + 10
   }
 
   pdf.setFont('helvetica', 'bold')
