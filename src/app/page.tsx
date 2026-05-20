@@ -1,5 +1,4 @@
 import { Hero } from '@/components/home/Hero'
-import { ColorShowcase } from '@/components/home/ColorShowcase'
 import { LiveCustomizationDemo } from '@/components/home/LiveCustomizationDemo'
 import { WhyChooseUs } from '@/components/home/WhyChooseUs'
 import { CorporateServices } from '@/components/home/CorporateServices'
@@ -24,7 +23,6 @@ export default function HomePage() {
       <ReviewsSection />
       <LocalSeoSection />
       <FAQAccordion />
-      <ColorShowcase />
       <CTABanner
         title="Ready to print your brand?"
         subtitle="Upload your design, preview on a premium tee mockup, and order in minutes — or get a bulk quote for your team."

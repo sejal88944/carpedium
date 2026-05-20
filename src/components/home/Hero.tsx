@@ -71,7 +71,6 @@ export function Hero() {
             transition={{ delay: 0.5 }}
             className="mt-12 flex flex-wrap gap-6 text-sm text-slate-400"
           >
-            <span>★ {COMPANY.rating} ({COMPANY.reviewCount} reviews)</span>
             <span>📍 {COMPANY.locations.join(' · ')}</span>
             <span>🕐 {COMPANY.hours}</span>
           </motion.div>

@@ -17,7 +17,10 @@ export default function CustomersPage() {
   const [open, setOpen] = useState(false)
 
   const data = useMemo(
-    () => customers.filter((c) => `${c.name} ${c.email} ${c.city || ''}`.toLowerCase().includes(q.toLowerCase())),
+    () =>
+      customers.filter((c) =>
+        `${c.name} ${c.email} ${c.city || ''} ${c.address || ''}`.toLowerCase().includes(q.toLowerCase()),
+      ),
     [customers, q],
   )
 
@@ -48,7 +51,7 @@ export default function CustomersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name, email, city..."
+              placeholder="Search by name, email, address, city..."
               className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none focus:border-brand dark:border-white/10 dark:bg-slate-950"
             />
           </div>
@@ -64,7 +67,7 @@ export default function CustomersPage() {
                 <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 dark:border-white/10">
                   <th className="pb-3 pr-3 font-bold">Customer</th>
                   <th className="pb-3 pr-3 font-bold">Contact</th>
-                  <th className="pb-3 pr-3 font-bold">City</th>
+                  <th className="pb-3 pr-3 font-bold">Address / city</th>
                   <th className="pb-3 pr-3 font-bold">Orders</th>
                   <th className="pb-3 pr-3 font-bold">Total spent</th>
                   <th className="pb-3 pr-3 font-bold">Actions</th>
@@ -97,12 +100,15 @@ export default function CustomersPage() {
                         </p>
                       ) : null}
                     </td>
-                    <td className="py-3 pr-3">
-                      {c.city ? (
-                        <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                          <MapPin className="h-3.5 w-3.5" /> {c.city}
+                    <td className="py-3 pr-3 max-w-[220px]">
+                      {c.address || c.city ? (
+                        <span className="inline-flex items-start gap-1 text-slate-600 dark:text-slate-400">
+                          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span className="leading-snug">{c.address || c.city}</span>
                         </span>
-                      ) : <span className="text-slate-400">—</span>}
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="py-3 pr-3 font-bold">{c.ordersCount}</td>
                     <td className="py-3 pr-3 font-bold text-emerald-600">
@@ -143,11 +149,18 @@ function CustomerForm({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
   const [city, setCity] = useState('')
 
   function handleSave() {
     if (!name.trim() || !email.trim()) return
-    add({ name: name.trim(), email: email.trim(), phone: phone.trim() || undefined, city: city.trim() || undefined })
+    add({
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim() || undefined,
+      address: address.trim() || undefined,
+      city: city.trim() || undefined,
+    })
     onClose()
   }
 
@@ -176,6 +189,15 @@ function CustomerForm({ onClose }: { onClose: () => void }) {
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Email *</label>
             <input type="email" className={cls} value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Address</label>
+            <textarea
+              className={`${cls} min-h-[72px]`}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Full delivery address (optional)"
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

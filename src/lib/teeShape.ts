@@ -30,6 +30,17 @@ export function getPrintArea(layout: TeeLayout) {
   }
 }
 
+/** Front vs back: back uses upper-back zone on the mirrored mockup. */
+export function getPrintAreaForSide(layout: TeeLayout, side: 'front' | 'back') {
+  if (side === 'front') return getPrintArea(layout)
+  return {
+    left: layout.left + layout.width * 0.22,
+    top: layout.top + layout.height * 0.13,
+    width: layout.width * 0.56,
+    height: layout.height * 0.32,
+  }
+}
+
 export function getTeeBounds(layout: TeeLayout) {
   return {
     left: layout.left + layout.width * 0.06,

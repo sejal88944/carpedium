@@ -16,7 +16,7 @@ import { useAdminStore } from '@/store/useAdminStore'
 import { openWhatsAppOrder } from '@/lib/whatsappOrder'
 import { downloadDesignPdf } from '@/lib/designPdf'
 import { tintTeeMockup } from '@/lib/teeMockup'
-import { getPrintArea, getTeeBounds, getTeeLayout } from '@/lib/teeShape'
+import { getPrintAreaForSide, getTeeBounds, getTeeLayout } from '@/lib/teeShape'
 import {
   detectTextCategory,
   generateTextSuggestions,
@@ -27,9 +27,16 @@ import {
 const W = 560
 const H = 700
 const TEE_LAYOUT = getTeeLayout(W, H)
-const PRINT = getPrintArea(TEE_LAYOUT)
-const CENTER = { x: PRINT.left + PRINT.width / 2, y: PRINT.top + PRINT.height / 2 }
 const TEE_BOUNDS = getTeeBounds(TEE_LAYOUT)
+
+function teeZone(side: 'front' | 'back') {
+  const print = getPrintAreaForSide(TEE_LAYOUT, side)
+  return {
+    print,
+    center: { x: print.left + print.width / 2, y: print.top + print.height / 2 },
+    bounds: TEE_BOUNDS,
+  }
+}
 const BASE_PRICE = 299
 const PRINT_CHARGE = 150
 
@@ -149,7 +156,10 @@ type Props = {
   initialColorId?: TeeColorId
 }
 
-type UserObject = FabricObject & { meta?: string }
+/** Custom Design Studio: only these 4 tee colours (Black, White, Navy, Grey). */
+const DESIGNER_TEE_COLORS = TEE_COLORS.slice(0, 4)
+
+type UserObject = FabricObject & { meta?: string; printSide?: 'front' | 'back' }
 
 function setMeta(obj: FabricObject, meta: string) {
   ;(obj as UserObject).meta = meta
@@ -198,8 +208,17 @@ function fabricBlendForColor(hex: string): GlobalCompositeOperation {
   return 'source-over'
 }
 
-async function drawTee(canvas: Canvas, hex: string) {
-  const url = await tintTeeMockup(hex)
+function syncDesignsForSide(canvas: Canvas, activeSide: 'front' | 'back') {
+  canvas.getObjects().forEach((o) => {
+    if (isHelper(o)) return
+    const ps = (o as UserObject).printSide
+    o.visible = !ps || ps === activeSide
+  })
+  canvas.requestRenderAll()
+}
+
+async function drawTee(canvas: Canvas, hex: string, side: 'front' | 'back') {
+  const url = await tintTeeMockup(hex, side)
   const img = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
 
   // Strip ALL old tee mockups + grid helpers before adding the recoloured tee.
@@ -252,7 +271,7 @@ function formatTeeText(value: string) {
   return value.toUpperCase()
 }
 
-function drawGrid(canvas: Canvas, visible: boolean) {
+function drawGrid(canvas: Canvas, visible: boolean, side: 'front' | 'back') {
   const existing = canvas.getObjects().filter((o) => (o as UserObject).meta === '__grid')
   if (visible && existing.length) return
   existing.forEach((o) => canvas.remove(o))
@@ -261,15 +280,16 @@ function drawGrid(canvas: Canvas, visible: boolean) {
     return
   }
 
+  const { print, center } = teeZone(side)
   const lines: Line[] = []
-  for (let x = PRINT.left; x <= PRINT.left + PRINT.width; x += 20) {
-    lines.push(new Line([x, PRINT.top, x, PRINT.top + PRINT.height], { stroke: 'rgba(14,165,233,0.16)' }))
+  for (let x = print.left; x <= print.left + print.width; x += 20) {
+    lines.push(new Line([x, print.top, x, print.top + print.height], { stroke: 'rgba(14,165,233,0.16)' }))
   }
-  for (let y = PRINT.top; y <= PRINT.top + PRINT.height; y += 20) {
-    lines.push(new Line([PRINT.left, y, PRINT.left + PRINT.width, y], { stroke: 'rgba(14,165,233,0.16)' }))
+  for (let y = print.top; y <= print.top + print.height; y += 20) {
+    lines.push(new Line([print.left, y, print.left + print.width, y], { stroke: 'rgba(14,165,233,0.16)' }))
   }
-  lines.push(new Line([CENTER.x, PRINT.top, CENTER.x, PRINT.top + PRINT.height], { stroke: 'rgba(14,165,233,0.45)' }))
-  lines.push(new Line([PRINT.left, CENTER.y, PRINT.left + PRINT.width, CENTER.y], { stroke: 'rgba(14,165,233,0.45)' }))
+  lines.push(new Line([center.x, print.top, center.x, print.top + print.height], { stroke: 'rgba(14,165,233,0.45)' }))
+  lines.push(new Line([print.left, center.y, print.left + print.width, center.y], { stroke: 'rgba(14,165,233,0.45)' }))
   lines.forEach((line) => {
     setMeta(line, '__grid')
     line.set({ selectable: false, evented: false, excludeFromExport: true })
@@ -278,23 +298,19 @@ function drawGrid(canvas: Canvas, visible: boolean) {
   canvas.requestRenderAll()
 }
 
-function clipToPrintZone(obj: FabricObject) {
-  obj.clipPath = new Rect({ ...PRINT, absolutePositioned: true })
-  return obj
-}
-
-function constrainToTeeArea(obj: FabricObject) {
+function constrainToTeeArea(obj: FabricObject, side: 'front' | 'back') {
+  const { center, bounds } = teeZone(side)
   const halfW = obj.getScaledWidth() / 2
   const halfH = obj.getScaledHeight() / 2
-  const minX = TEE_BOUNDS.left + Math.min(halfW, TEE_BOUNDS.width / 2)
-  const maxX = TEE_BOUNDS.left + TEE_BOUNDS.width - Math.min(halfW, TEE_BOUNDS.width / 2)
-  const minY = TEE_BOUNDS.top + Math.min(halfH, TEE_BOUNDS.height / 2)
-  const maxY = TEE_BOUNDS.top + TEE_BOUNDS.height - Math.min(halfH, TEE_BOUNDS.height / 2)
-  const currentLeft = Number(obj.left ?? CENTER.x)
-  const currentTop = Number(obj.top ?? CENTER.y)
+  const minX = bounds.left + Math.min(halfW, bounds.width / 2)
+  const maxX = bounds.left + bounds.width - Math.min(halfW, bounds.width / 2)
+  const minY = bounds.top + Math.min(halfH, bounds.height / 2)
+  const maxY = bounds.top + bounds.height - Math.min(halfH, bounds.height / 2)
+  const currentLeft = Number(obj.left ?? center.x)
+  const currentTop = Number(obj.top ?? center.y)
 
-  const snapX = Math.abs(currentLeft - CENTER.x) < 8 ? CENTER.x : currentLeft
-  const snapY = Math.abs(currentTop - CENTER.y) < 8 ? CENTER.y : currentTop
+  const snapX = Math.abs(currentLeft - center.x) < 8 ? center.x : currentLeft
+  const snapY = Math.abs(currentTop - center.y) < 8 ? center.y : currentTop
 
   obj.set({
     left: Math.min(maxX, Math.max(minX, snapX)),
@@ -412,17 +428,23 @@ function generateImageFromText(
   return canvas.toDataURL('image/png')
 }
 
-async function placeImage(canvas: Canvas, url: string, teeHex: string) {
+async function placeImage(
+  canvas: Canvas,
+  url: string,
+  teeHex: string,
+  side: 'front' | 'back',
+) {
+  const { print, center } = teeZone(side)
   const isDataUrl = url.startsWith('data:')
   const img = await FabricImage.fromURL(url, isDataUrl ? {} : { crossOrigin: 'anonymous' })
   const iw = img.width ?? 1
   const ih = img.height ?? 1
-  const scale = Math.min((PRINT.width * 0.82) / iw, (PRINT.height * 0.82) / ih, 1.5)
+  const scale = Math.min((print.width * 0.82) / iw, (print.height * 0.82) / ih, 1.5)
 
   img.scale(scale)
   img.set({
-    left: CENTER.x,
-    top: CENTER.y,
+    left: center.x,
+    top: center.y,
     originX: 'center',
     originY: 'center',
     globalCompositeOperation: fabricBlendForColor(teeHex),
@@ -434,6 +456,7 @@ async function placeImage(canvas: Canvas, url: string, teeHex: string) {
     cornerStyle: 'circle',
   })
   setMeta(img, 'print')
+  ;(img as UserObject).printSide = side
   img.clipPath = undefined
   canvas.add(img)
   canvas.setActiveObject(img)
@@ -479,8 +502,13 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
   const textInputRef = useRef<HTMLInputElement>(null)
   const gridNoticeRef = useRef<HTMLDivElement>(null)
   const fabricRef = useRef<Canvas | null>(null)
+  const sideRef = useRef<'front' | 'back'>('front')
   const [side, setSide] = useState<'front' | 'back'>('front')
-  const [colorId, setColorId] = useState<TeeColorId>(initialColorId)
+  sideRef.current = side
+  const safeInitial: TeeColorId = DESIGNER_TEE_COLORS.some((c) => c.id === initialColorId)
+    ? initialColorId
+    : (DESIGNER_TEE_COLORS[0]?.id as TeeColorId)
+  const [colorId, setColorId] = useState<TeeColorId>(safeInitial)
   const [text, setText] = useState('')
   const [font, setFont] = useState(FONTS[0])
   const [fontWeight, setFontWeight] = useState('700')
@@ -554,28 +582,28 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     canvas.on('object:moving', (event) => {
       const target = event.target
       if (!target || !isUserObject(target)) return
-      constrainToTeeArea(target)
-      drawGrid(canvas, true)
+      constrainToTeeArea(target, sideRef.current)
+      drawGrid(canvas, true, sideRef.current)
       showGridNotice(true)
     })
     canvas.on('object:scaling', (event) => {
       const target = event.target
       if (!target || !isUserObject(target)) return
-      constrainToTeeArea(target)
-      drawGrid(canvas, true)
+      constrainToTeeArea(target, sideRef.current)
+      drawGrid(canvas, true, sideRef.current)
       showGridNotice(true)
     })
     canvas.on('object:rotating', () => {
-      drawGrid(canvas, true)
+      drawGrid(canvas, true, sideRef.current)
       showGridNotice(true)
     })
     canvas.on('object:modified', () => {
-      drawGrid(canvas, false)
+      drawGrid(canvas, false, sideRef.current)
       showGridNotice(false)
       syncPreview()
     })
     canvas.on('selection:cleared', () => {
-      drawGrid(canvas, false)
+      drawGrid(canvas, false, sideRef.current)
       showGridNotice(false)
       syncPreview()
     })
@@ -594,11 +622,13 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
   useEffect(() => {
     let cancelled = false
     const targetHex = color.hex
+    const activeSide = side
     const run = async () => {
       const canvas = fabricRef.current
       if (!canvas) return
-      await drawTee(canvas, targetHex)
+      await drawTee(canvas, targetHex, activeSide)
       if (cancelled) return
+      syncDesignsForSide(canvas, activeSide)
       canvas.renderAll()
       syncPreview()
     }
@@ -606,7 +636,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     return () => {
       cancelled = true
     }
-  }, [color.hex, syncPreview])
+  }, [color.hex, side, syncPreview])
 
   async function handleFile(file?: File) {
     const canvas = fabricRef.current
@@ -625,7 +655,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       removeSampleLabel(canvas)
       removeUploadedPrint(canvas)
       const url = await resizeImageForEditor(file)
-      await placeImage(canvas, url, color.hex)
+      await placeImage(canvas, url, color.hex, side)
       syncPreview()
     } catch (err) {
       console.error('upload failed', err)
@@ -649,7 +679,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       text
     const generated = generateImageFromText(relatedText, theme)
     setFileName(`${theme.name} generated design`)
-    await placeImage(canvas, generated, color.hex)
+    await placeImage(canvas, generated, color.hex, side)
     syncPreview()
   }
 
@@ -672,10 +702,11 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     if (!canvas || !clean) return
     removeSampleLabel(canvas)
     if (replaceExisting) removeUserText(canvas)
+    const { center } = teeZone(side)
     const finalText = `${opts.prefix ?? ''}${formatTeeText(clean)}${opts.suffix ?? ''}`
     const t = new IText(finalText, {
-      left: CENTER.x,
-      top: CENTER.y,
+      left: center.x,
+      top: center.y,
       originX: 'center',
       originY: 'center',
       fontFamily: opts.fontFamily,
@@ -690,6 +721,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       cornerStyle: 'circle',
     })
     setMeta(t, 'user-text')
+    ;(t as UserObject).printSide = side
     t.clipPath = undefined
     canvas.add(t)
     canvas.setActiveObject(t)
@@ -753,7 +785,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     if (props.angle !== undefined) active.rotate(props.angle)
     if (props.left !== undefined) active.set('left', props.left)
     if (props.top !== undefined) active.set('top', props.top)
-    constrainToTeeArea(active)
+    constrainToTeeArea(active, side)
     canvas.requestRenderAll()
     syncPreview()
   }
@@ -933,6 +965,11 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
             ))}
           </div>
         </div>
+        {side === 'back' ? (
+          <p className="mb-4 text-center text-xs text-slate-500 dark:text-zinc-400">
+            Back view — design goes on the upper back (tee is mirrored from front mockup).
+          </p>
+        ) : null}
 
         <div className="group relative mx-auto flex min-h-[590px] max-w-3xl items-center justify-center overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.96),rgba(226,232,240,0.8))] p-4 transition hover:scale-[1.005] dark:bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.8),rgba(9,9,11,0.96))]">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
@@ -980,8 +1017,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
               <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500">
                 T-Shirt Color Selector
               </h3>
-              <div className="mt-4 grid grid-cols-6 gap-3">
-                {TEE_COLORS.map((c) => (
+              <div className="mt-4 grid grid-cols-4 gap-3">
+                {DESIGNER_TEE_COLORS.map((c) => (
                   <button
                     key={c.id}
                     type="button"

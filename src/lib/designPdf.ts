@@ -168,6 +168,10 @@ export type CartPdfMeta = {
   shipping?: number
   total: number
   orderRef?: string
+  customerName?: string
+  customerPhone?: string
+  customerEmail?: string
+  customerAddress?: string
 }
 
 /**
@@ -222,6 +226,45 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
     pdf.setFontSize(11)
     pdf.text(`Order ref: ${meta.orderRef}`, margin, y)
     y += 6
+  }
+
+  const hasCust =
+    meta.customerName?.trim() ||
+    meta.customerPhone?.trim() ||
+    meta.customerEmail?.trim() ||
+    meta.customerAddress?.trim()
+  if (hasCust) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(11)
+    pdf.text('Delivery / contact', margin, y)
+    y += 6
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    const linesCust: Array<[string, string]> = []
+    if (meta.customerName?.trim()) linesCust.push(['Name', meta.customerName.trim()])
+    if (meta.customerPhone?.trim()) linesCust.push(['Phone', meta.customerPhone.trim()])
+    if (meta.customerEmail?.trim()) linesCust.push(['Email', meta.customerEmail.trim()])
+    if (meta.customerAddress?.trim()) {
+      const wrapped = pdf.splitTextToSize(meta.customerAddress.trim(), usableW - 24)
+      linesCust.push(['Address', wrapped.join('\n')])
+    }
+    for (const [label, text] of linesCust) {
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9)
+      pdf.setTextColor(100, 116, 139)
+      pdf.text(`${label}:`, margin, y)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(15, 23, 42)
+      pdf.setFontSize(10)
+      const parts = text.split('\n')
+      let lineY = y
+      parts.forEach((part, idx) => {
+        pdf.text(part, margin + 28, lineY)
+        if (idx < parts.length - 1) lineY += 5
+      })
+      y = lineY + 6
+    }
+    y += 2
   }
 
   pdf.setFont('helvetica', 'bold')

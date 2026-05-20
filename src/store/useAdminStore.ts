@@ -107,6 +107,8 @@ export type AdminCustomer = {
   name: string
   email: string
   phone?: string
+  /** Shipping / billing address (full line). */
+  address?: string
   city?: string
   ordersCount: number
   totalSpent: number
@@ -342,6 +344,7 @@ export const useAdminStore = create<State & Actions>()(
               name: c.name,
               email: c.email,
               phone: c.phone,
+              address: c.address?.trim() || undefined,
               city: c.city,
             }
             return { customers: [next, ...s.customers] }
@@ -352,6 +355,7 @@ export const useAdminStore = create<State & Actions>()(
             name: c.name || existing.name,
             email: c.email || existing.email,
             phone: c.phone || existing.phone,
+            address: (c.address?.trim() ? c.address.trim() : undefined) ?? existing.address,
             city: c.city || existing.city,
             ordersCount: existing.ordersCount + (c.addOrder ? 1 : 0),
             totalSpent: existing.totalSpent + (c.addOrder?.total ?? 0),

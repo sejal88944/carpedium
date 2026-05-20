@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import type { BlogPost } from '@/data/blog'
-import { BLOG_CATEGORIES } from '@/data/blog'
 import { useAdminStore } from '@/store/useAdminStore'
 
 function readTimeFor(text?: string) {
@@ -36,11 +35,24 @@ export function BlogPageClient({ posts, featured }: { posts: BlogPost[]; feature
     return [...adminMapped, ...seedRest]
   }, [hydrated, adminBlogs, posts])
 
+  // Pick the newest published blog as featured — admin blogs win because they're
+  // prepended to allPosts, but we still fall back to the seed featured prop.
+  const liveFeatured = useMemo<BlogPost>(() => {
+    if (!hydrated) return featured
+    return allPosts[0] ?? featured
+  }, [hydrated, allPosts, featured])
+
   const [category, setCategory] = useState<string>('All')
   const [search, setSearch] = useState('')
 
+  const categoryList = useMemo(() => {
+    const set = new Set<string>()
+    allPosts.forEach((p) => p.category && set.add(p.category))
+    return ['All', ...Array.from(set)]
+  }, [allPosts])
+
   const filtered = useMemo(() => {
-    const rest = allPosts.filter((p) => p.slug !== featured.slug)
+    const rest = allPosts.filter((p) => p.slug !== liveFeatured.slug)
     return rest.filter((p) => {
       const matchCat = category === 'All' || p.category === category
       const q = search.trim().toLowerCase()
@@ -51,13 +63,13 @@ export function BlogPageClient({ posts, featured }: { posts: BlogPost[]; feature
         p.tags.some((t) => t.toLowerCase().includes(q))
       return matchCat && matchSearch
     })
-  }, [allPosts, featured.slug, category, search])
+  }, [allPosts, liveFeatured.slug, category, search])
 
   return (
     <>
       <section className="border-b border-black/5 py-20 dark:border-white/5">
         <div className="mx-auto max-w-7xl px-4 lg:px-8">
-          <Link href={`/blog/${featured.slug}`} className="group block">
+          <Link href={`/blog/${liveFeatured.slug}`} className="group block">
             <motion.article
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -68,17 +80,17 @@ export function BlogPageClient({ posts, featured }: { posts: BlogPost[]; feature
                 Featured Article
               </p>
               <span className="mt-4 inline-block rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">
-                {featured.category}
+                {liveFeatured.category}
               </span>
               <h2 className="mt-4 max-w-2xl font-display text-3xl font-bold leading-tight transition group-hover:text-sky-200 md:text-5xl">
-                {featured.title}
+                {liveFeatured.title}
               </h2>
-              <p className="mt-4 max-w-xl text-lg text-zinc-300">{featured.excerpt}</p>
+              <p className="mt-4 max-w-xl text-lg text-zinc-300">{liveFeatured.excerpt}</p>
               <div className="mt-8 flex flex-wrap items-center gap-4 text-sm text-zinc-400">
-                <span>{featured.readTime} read</span>
+                <span>{liveFeatured.readTime} read</span>
                 <span>·</span>
-                <time dateTime={featured.date}>
-                  {new Date(featured.date).toLocaleDateString('en-IN', {
+                <time dateTime={liveFeatured.date}>
+                  {new Date(liveFeatured.date).toLocaleDateString('en-IN', {
                     day: 'numeric',
                     month: 'long',
                     year: 'numeric',
@@ -102,7 +114,7 @@ export function BlogPageClient({ posts, featured }: { posts: BlogPost[]; feature
               className="w-full rounded-full border border-black/10 bg-white px-5 py-3 text-sm shadow-sm dark:border-white/10 dark:bg-void-3 md:max-w-sm"
             />
             <div className="flex flex-wrap gap-2">
-              {BLOG_CATEGORIES.map((cat) => (
+              {categoryList.map((cat) => (
                 <button
                   key={cat}
                   type="button"

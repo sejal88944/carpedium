@@ -38,6 +38,7 @@ export function CartView() {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
   const [customerError, setCustomerError] = useState('')
 
   useEffect(() => {
@@ -45,10 +46,11 @@ export function CartView() {
     try {
       const raw = window.localStorage.getItem('aasha-customer')
       if (!raw) return
-      const data = JSON.parse(raw) as { name?: string; phone?: string; email?: string }
+      const data = JSON.parse(raw) as { name?: string; phone?: string; email?: string; address?: string }
       if (data.name) setCustomerName(data.name)
       if (data.phone) setCustomerPhone(data.phone)
       if (data.email) setCustomerEmail(data.email)
+      if (data.address) setCustomerAddress(data.address)
     } catch {
       /* ignore */
     }
@@ -136,16 +138,19 @@ export function CartView() {
     const name = customerName.trim()
     const phone = customerPhone.trim()
     const email = customerEmail.trim()
+    const addr = customerAddress.trim()
     if (!name || !phone) {
       setCustomerError('Name ani phone tako, mg WhatsApp open hoil.')
       return
     }
     setCustomerError('')
 
+    const code = `ORD-${Date.now().toString(36).toUpperCase()}`
+
     try {
       window.localStorage.setItem(
         'aasha-customer',
-        JSON.stringify({ name, phone, email }),
+        JSON.stringify({ name, phone, email, address: addr || undefined }),
       )
     } catch {
       /* ignore */
@@ -173,13 +178,19 @@ export function CartView() {
           previewImage: i.previewImage,
           slug: i.slug,
         })),
-        pricing,
+        {
+          ...pricing,
+          orderRef: code,
+          customerName: name,
+          customerPhone: phone,
+          customerEmail: email || undefined,
+          customerAddress: addr || undefined,
+        },
       )
     } catch (err) {
       console.error('cart pdf export failed', err)
     }
 
-    const code = `ORD-${Date.now().toString(36).toUpperCase()}`
     const totalQty = items.reduce((n, i) => n + i.qty, 0)
     const productLabel =
       items.length === 1
@@ -188,6 +199,7 @@ export function CartView() {
     const note = [
       appliedCoupon?.valid ? `Coupon: ${appliedCoupon.coupon.code}` : null,
       pdfFileName ? `PDF: ${pdfFileName}` : null,
+      addr ? `Address: ${addr}` : null,
     ]
       .filter(Boolean)
       .join(' · ')
@@ -209,13 +221,23 @@ export function CartView() {
         name,
         email: email || '',
         phone,
+        address: addr || undefined,
         addOrder: { total, at: new Date().toISOString() },
       })
     } catch (err) {
       console.error('failed to record order', err)
     }
 
-    openWhatsAppOrder(items, { pdfFileName, pricing })
+    openWhatsAppOrder(items, {
+      pdfFileName,
+      pricing,
+      customer: {
+        name,
+        phone,
+        email: email || undefined,
+        address: addr || undefined,
+      },
+    })
   }
 
   if (items.length === 0) {
@@ -591,6 +613,13 @@ export function CartView() {
                 onChange={(e) => setCustomerEmail(e.target.value)}
                 placeholder="Email (optional)"
                 className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-void-3"
+              />
+              <textarea
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                placeholder="Delivery address (optional)"
+                rows={3}
+                className="w-full resize-y rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-void-3"
               />
               {customerError ? (
                 <p className="text-xs font-semibold text-red-500">{customerError}</p>

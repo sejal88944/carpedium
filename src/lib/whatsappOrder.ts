@@ -27,6 +27,13 @@ export type WhatsAppOrderOptions = {
     shipping?: number
     total: number
   }
+  /** Shown before pricing — shipping / invoice contact lines. */
+  customer?: {
+    name: string
+    phone?: string
+    email?: string
+    address?: string
+  }
 }
 
 function productLink(slug: string): string {
@@ -63,6 +70,17 @@ export function buildWhatsAppOrderUrl(
   })
 
   lines.push('')
+  if (options.customer) {
+    const c = options.customer
+    lines.push('━━━━━━━━━━━━━━━━━━━')
+    lines.push('*Delivery / contact*')
+    if (c.name) lines.push(`Name: ${c.name}`)
+    if (c.phone) lines.push(`Phone: ${c.phone}`)
+    if (c.email) lines.push(`Email: ${c.email}`)
+    if (c.address?.trim()) lines.push(`Address: ${c.address.trim()}`)
+    lines.push('')
+  }
+
   if (options.pricing) {
     const p = options.pricing
     lines.push('━━━━━━━━━━━━━━━━━━━')

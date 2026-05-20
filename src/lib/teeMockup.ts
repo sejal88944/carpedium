@@ -3,6 +3,7 @@ import { isDarkTeeHex } from '@/lib/teeShape'
 export const TEE_MOCKUP_SRC = '/mockups/tee-front-base.png'
 export { TEE_MOCKUP_SIZE } from '@/lib/teeShape'
 let baseImage: HTMLImageElement | null = null
+/** Keys: `front:${hex}` tinted PNG, `back:${hex}` horizontally flipped from front */
 const tintCache = new Map<string, string>()
 
 function hexToRgb(hex: string) {
@@ -35,9 +36,33 @@ export function loadTeeBaseImage(): Promise<HTMLImageElement> {
   })
 }
 
-/** Recolor realistic mockup while keeping fold shadows */
-export async function tintTeeMockup(hex: string): Promise<string> {
-  const cached = tintCache.get(hex)
+function flipDataUrlHorizontally(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const im = new Image()
+    im.crossOrigin = 'anonymous'
+    im.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = im.width
+      c.height = im.height
+      const x = c.getContext('2d')
+      if (!x) {
+        reject(new Error('canvas_failed'))
+        return
+      }
+      x.translate(c.width, 0)
+      x.scale(-1, 1)
+      x.drawImage(im, 0, 0)
+      resolve(c.toDataURL('image/png'))
+    }
+    im.onerror = () => reject(new Error('tee_flip_failed'))
+    im.src = dataUrl
+  })
+}
+
+/** Recolor realistic mockup; `back` mirrors the front asset (no separate PNG). */
+export async function tintTeeMockup(hex: string, side: 'front' | 'back' = 'front'): Promise<string> {
+  const cacheKey = `${side}:${hex}`
+  const cached = tintCache.get(cacheKey)
   if (cached) return cached
 
   const img = await loadTeeBaseImage()
@@ -73,7 +98,15 @@ export async function tintTeeMockup(hex: string): Promise<string> {
   }
 
   ctx.putImageData(imageData, 0, 0)
-  const url = canvas.toDataURL('image/png')
-  tintCache.set(hex, url)
+  let url = canvas.toDataURL('image/png')
+  tintCache.set(`front:${hex}`, url)
+
+  if (side === 'back') {
+    url = await flipDataUrlHorizontally(url)
+    tintCache.set(cacheKey, url)
+    return url
+  }
+
+  tintCache.set(cacheKey, url)
   return url
 }
