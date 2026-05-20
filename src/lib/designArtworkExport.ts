@@ -196,7 +196,7 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Page 2 layout: logo · text · emoji side-by-side in one clear section (not scattered on tee).
+ * Page 2 print sheet: image · text · emoji in one horizontal row, vertically centred (like print banner).
  */
 async function composePrintRowSection(
   fullDataUrl: string,
@@ -206,9 +206,10 @@ async function composePrintRowSection(
   if (!fullDataUrl.startsWith('data:') || objects.length === 0) return null
 
   const fullImg = await loadImage(fullDataUrl)
-  const gap = Math.round(28 * (multiplier / 4))
-  const maxCellH = Math.round(320 * (multiplier / 4))
-  const pieces: Array<{ img: HTMLImageElement; w: number; h: number }> = []
+  const gap = Math.round(40 * (multiplier / 4))
+  const maxRowH = Math.round(380 * (multiplier / 4))
+  const pad = Math.round(40 * (multiplier / 4))
+  const raw: Array<{ img: HTMLImageElement; w: number; h: number }> = []
 
   for (const o of sortObjectsForPrintRow(objects)) {
     o.setCoords()
@@ -228,21 +229,25 @@ async function composePrintRowSection(
     pctx.drawImage(fullImg, sx, sy, sw, sh, 0, 0, sw, sh)
 
     const loaded = await loadImage(piece.toDataURL('image/png'))
-    let dw = loaded.naturalWidth
-    let dh = loaded.naturalHeight
-    if (dh > maxCellH) {
-      const s = maxCellH / dh
-      dw = Math.round(dw * s)
-      dh = maxCellH
-    }
-    pieces.push({ img: loaded, w: dw, h: dh })
+    raw.push({ img: loaded, w: loaded.naturalWidth, h: loaded.naturalHeight })
   }
 
-  if (pieces.length === 0) return null
+  if (raw.length === 0) return null
+
+  // Same row height for every piece — logo, text and emoji align on one line.
+  let rowH = Math.max(...raw.map((p) => p.h))
+  if (rowH > maxRowH) rowH = maxRowH
+
+  const pieces = raw.map((p) => {
+    const scale = rowH / p.h
+    return {
+      img: p.img,
+      w: Math.max(1, Math.round(p.w * scale)),
+      h: rowH,
+    }
+  })
 
   const rowW = pieces.reduce((s, p, i) => s + p.w + (i ? gap : 0), 0)
-  const rowH = Math.max(...pieces.map((p) => p.h))
-  const pad = Math.round(36 * (multiplier / 4))
   const outW = rowW + pad * 2
   const outH = rowH + pad * 2
 
@@ -254,9 +259,6 @@ async function composePrintRowSection(
 
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, outW, outH)
-  ctx.strokeStyle = '#cbd5e1'
-  ctx.lineWidth = Math.max(2, Math.round(2 * (multiplier / 4)))
-  ctx.strokeRect(1, 1, outW - 2, outH - 2)
 
   let x = pad
   const midY = outH / 2
@@ -397,11 +399,14 @@ export async function exportArtworkFromFabric(
   let transparentPng = await upscaleForPrint(transparentCrop.dataUrl)
   const flatPrintPng = await upscaleForPrint(flatCrop.dataUrl)
 
-  const printSheetPng = await compositeOnBackground(transparentPng, '#ffffff')
+  const rowSection = await composePrintRowSection(transparentFull, userOnSide, m)
+  let printSheetPng = rowSection
+    ? await upscaleForPrint(rowSection.dataUrl)
+    : await compositeOnBackground(transparentPng, '#ffffff')
 
   const sheetImg = await loadImage(printSheetPng).catch(() => null)
-  const tw = sheetImg?.naturalWidth || transparentCrop.widthPx
-  const th = sheetImg?.naturalHeight || transparentCrop.heightPx
+  const tw = sheetImg?.naturalWidth || rowSection?.widthPx || transparentCrop.widthPx
+  const th = sheetImg?.naturalHeight || rowSection?.heightPx || transparentCrop.heightPx
 
   const mmPerPx = CHEST_PRINT_WIDTH_MM / cropRegion.width
   const printWidthMm = Math.round(cropRegion.width * mmPerPx)
@@ -438,7 +443,10 @@ export async function exportArtworkFromFabric(
     heightPx: th,
     printWidthMm,
     printHeightMm,
-    aspectRatio: tw / Math.max(1, th),
+    aspectRatio:
+      rowSection && rowSection.widthPx > 0
+        ? rowSection.widthPx / rowSection.heightPx
+        : tw / Math.max(1, th),
     designJson,
     hasArtwork: true,
   }
