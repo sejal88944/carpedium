@@ -48,7 +48,7 @@ export function AdminShell({
       {/* Mobile topbar */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur lg:hidden dark:border-white/10 dark:bg-slate-950/80">
         <Link href="/admin" className="flex items-center gap-2 font-display text-lg font-bold">
-          <ShieldCheck className="h-5 w-5 text-brand" /> AASHA Admin
+          <ShieldCheck className="h-5 w-5 text-brand" /> Carpe Diem Admin
         </Link>
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu">
           <Menu className="h-6 w-6" />
@@ -63,7 +63,7 @@ export function AdminShell({
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-display text-base font-bold leading-none">AASHA Admin</p>
+              <p className="font-display text-base font-bold leading-none">Carpe Diem Admin</p>
               <p className="mt-1 text-[11px] uppercase tracking-widest text-slate-500">Control panel</p>
             </div>
           </Link>
@@ -131,7 +131,7 @@ export function AdminShell({
               className="relative h-full w-72 overflow-y-auto bg-white p-4 shadow-2xl dark:bg-slate-950"
             >
               <div className="flex items-center justify-between">
-                <p className="font-display text-lg font-bold">AASHA Admin</p>
+                <p className="font-display text-lg font-bold">Carpe Diem Admin</p>
                 <button type="button" onClick={() => setOpen(false)} aria-label="Close menu">
                   <X className="h-6 w-6" />
                 </button>

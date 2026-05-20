@@ -4,7 +4,9 @@ import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { motion } from 'framer-motion'
+import Image from 'next/image'
 import { ShieldCheck, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { COMPANY } from '@/data/brand'
 
 function LoginInner() {
   const params = useSearchParams()
@@ -56,12 +58,16 @@ function LoginInner() {
           className="w-full rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-xl"
         >
           <div className="mb-6 flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-lg">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
+            <Image
+              src={COMPANY.logo}
+              alt={`${COMPANY.shortName} logo`}
+              width={48}
+              height={48}
+              className="rounded-full object-cover ring-2 ring-amber-500/50"
+            />
             <div>
               <p className="font-display text-2xl font-bold">Admin Login</p>
-              <p className="text-xs text-slate-400">AASHA-SM Technologies Pvt. Ltd.</p>
+              <p className="text-xs text-slate-400">{COMPANY.shortName} · Custom T-Shirts</p>
             </div>
           </div>
 

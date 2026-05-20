@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth'
 import { AdminShell } from '@/components/admin/AdminShell'
 
 export const metadata: Metadata = {
-  title: 'AASHA Admin Panel',
+  title: 'Carpe Diem Admin Panel',
   robots: { index: false, follow: false },
 }
 

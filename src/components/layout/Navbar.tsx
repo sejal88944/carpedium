@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { COMPANY } from '@/data/brand'
 import { useTheme } from '@/components/ThemeProvider'
 import { CartBadge } from '@/components/layout/CartBadge'
+import { BrandLogo } from '@/components/layout/BrandLogo'
 
 /**
  * Primary navbar links — kept lean for SEO crawl priority + Google My Business mapping.
@@ -41,14 +41,7 @@ export function Navbar() {
       }`}
     >
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 lg:px-8">
-        <Link href="/" className="leading-tight">
-          <span className="block font-display text-lg font-bold tracking-tight text-gradient">
-            {COMPANY.shortName}
-          </span>
-          <span className="hidden text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-zinc-500 sm:block">
-            Custom T-Shirt Printing
-          </span>
-        </Link>
+        <BrandLogo href="/" size="sm" />
         <nav className="hidden items-center gap-1 rounded-full border border-black/5 bg-white/55 p-1 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/5 lg:flex">
           {LINKS.map((l) => (
             <Link

@@ -47,6 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd()) }}
         />
+        <link rel="icon" href={COMPANY.logo} type="image/png" />
+        <link rel="apple-touch-icon" href={COMPANY.logo} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

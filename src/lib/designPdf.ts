@@ -379,7 +379,7 @@ export function downloadDesignPdf(meta: DesignPdfMeta, printPngDataUrl?: string)
   const orderId = meta.orderId || `ORD-${Date.now()}`
   const safe =
     meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'design'
-  const fileName = `aasha-sm-invoice-${safe}-${Date.now()}.pdf`
+  const fileName = `carpe-diem-invoice-${safe}-${Date.now()}.pdf`
   const pdf = buildDesignPdf({ ...meta, orderId })
   pdf.save(fileName)
   let dataUrl = ''
@@ -692,7 +692,7 @@ export function buildCartPdf(items: CartPdfItem[], meta: CartPdfMeta): jsPDF {
 }
 
 export function downloadCartPdf(items: CartPdfItem[], meta: CartPdfMeta): string {
-  const fileName = `aasha-sm-cart-${Date.now()}.pdf`
+  const fileName = `carpe-diem-cart-${Date.now()}.pdf`
   const pdf = buildCartPdf(items, meta)
   pdf.save(fileName)
   return fileName

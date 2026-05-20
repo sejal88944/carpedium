@@ -1,14 +1,17 @@
 export const COMPANY = {
-  name: 'AASHA-SM TECHNOLOGIES PRIVATE LIMITED',
-  shortName: 'AASHA-SM TECH',
+  name: 'Carpe Diem',
+  shortName: 'Carpe Diem',
+  legalName: 'Carpe Diem Custom T-Shirts',
+  logo: '/logo.png',
+  instagram: 'https://www.instagram.com/customize_tshirts6?igsh=czNwbmYwYWRteGxm',
   email: 'adminsmtechsolution@gmail.com',
   phone: '+91 9529998320',
   phoneTel: '919529998320',
   whatsapp: '919529998320',
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || 'https://aashasmtech.com',
-  tagline: 'Premium Custom T-Shirt Printing & Branding',
+  tagline: 'Seize The Day · Premium Custom T-Shirt Printing',
   description:
-    'Professional custom T-shirt printing for businesses, startups, colleges, teams, events, and personal brands across Pune, Mumbai, Hyderabad, Bangalore, Nagpur and Nashik.',
+    'Carpe Diem — professional custom T-shirt printing for businesses, startups, colleges, teams, events, and personal brands. Logo, text & emoji on your tee.',
   hours: 'Mon–Sat: 9:00 AM – 8:00 PM',
   rating: 4.9,
   reviewCount: 128,
@@ -93,4 +96,5 @@ export const SEO_KEYWORDS = [
   'custom tshirt printing Pune',
   'polo tshirt manufacturer',
   'bulk tshirt supplier',
+  'carpe diem custom t shirts',
 ] as const

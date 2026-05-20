@@ -96,7 +96,7 @@ export function CategoryGrid() {
 
                   <CategoryImageStage
                     images={gallery}
-                    alt={`${c.name} — custom printing by AASHA-SM TECH`}
+                    alt={`${c.name} — custom printing by Carpe Diem`}
                     priority={i < 3}
                   />
 

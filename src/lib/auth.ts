@@ -69,7 +69,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return {
             id: 'env-admin',
             email: FALLBACK_ADMIN_EMAIL,
-            name: 'AASHA Admin',
+            name: 'Carpe Diem Admin',
             role: 'admin',
           }
         }

@@ -12,7 +12,7 @@ export function LocalSeoSection() {
         </p>
         <p className="mt-4 text-slate-600 dark:text-zinc-400">
           If you are searching for custom tshirt printing Pune, polo tshirt printing, corporate
-          tshirts, bulk tshirt supplier, custom uniform printing or promotional t shirts, AASHA-SM
+          tshirts, bulk tshirt supplier, custom uniform printing or promotional t shirts, Carpe Diem
           TECH offers a complete branding workflow: choose apparel, select color, upload logo,
           preview front/back, approve artwork and receive delivery across major Indian cities.
         </p>

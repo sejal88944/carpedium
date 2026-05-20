@@ -1008,7 +1008,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
         pdfFileName = result.fileName
         pdfDataUrl = result.dataUrl
         if (printArtwork.startsWith('data:')) {
-          downloadDataUrl(printArtwork, `aasha-sm-print-artwork-${orderId}.png`)
+          downloadDataUrl(printArtwork, `carpe-diem-print-artwork-${orderId}.png`)
         }
       } catch (err) {
         console.error('pdf export failed', err)
@@ -1580,7 +1580,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
               </button>
               <a
                 href={exportPreview()}
-                download="aasha-sm-design.png"
+                download="carpe-diem-design.png"
                 className="block w-full rounded-full border border-brand py-4 text-center text-sm font-bold text-brand transition hover:bg-brand hover:text-white"
               >
                 Download HD Preview

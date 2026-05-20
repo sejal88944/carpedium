@@ -10,7 +10,7 @@ export function pageMeta(opts: {
   const title = `${opts.title} | ${COMPANY.shortName}`
   const description = opts.description || COMPANY.description
   const url = `${COMPANY.siteUrl}${opts.path || ''}`
-  const image = opts.image || `${COMPANY.siteUrl}/og-default.jpg`
+  const image = opts.image || `${COMPANY.siteUrl}${COMPANY.logo}`
 
   return {
     title,
@@ -44,6 +44,8 @@ export function localBusinessJsonLd() {
     telephone: COMPANY.phone,
     email: COMPANY.email,
     url: COMPANY.siteUrl,
+    image: `${COMPANY.siteUrl}${COMPANY.logo}`,
+    sameAs: [COMPANY.instagram],
     priceRange: '₹₹',
     areaServed: COMPANY.locations.map((city) => ({
       '@type': 'City',

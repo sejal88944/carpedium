@@ -43,9 +43,9 @@ function formatInr(n: number) {
 function buildOrderMessage(payload: WhatsAppOrderPayload) {
   const lines: string[] = []
   if (payload.orderId) {
-    lines.push(`Hi AASHA-SM TECH! New order *#${payload.orderId}* placed on the website:`)
+    lines.push(`Hi ${COMPANY.shortName}! New order *#${payload.orderId}* placed on the website:`)
   } else {
-    lines.push('Hi AASHA-SM TECH! I want to place a custom T-shirt order:')
+    lines.push(`Hi ${COMPANY.shortName}! I want to place a custom T-shirt order:`)
   }
   lines.push('')
 
@@ -116,6 +116,9 @@ export function whatsappChatLink(message?: string) {
   const number = process.env.NEXT_PUBLIC_WHATSAPP || COMPANY.whatsapp
   const text = message
     ? `?text=${encodeURIComponent(message)}`
-    : '?text=' + encodeURIComponent('Hi AASHA-SM TECH! I want to know more about your custom T-shirt printing.')
+    : '?text=' +
+        encodeURIComponent(
+          `Hi ${COMPANY.shortName}! I want to know more about your custom T-shirt printing.`,
+        )
   return `https://wa.me/${number}${text}`
 }

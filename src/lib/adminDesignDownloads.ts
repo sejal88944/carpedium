@@ -16,7 +16,7 @@ export function downloadPrintDesignPng(upload: AdminUpload) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'design'
-  downloadDataUrl(src, `aasha-sm-print-${safe}.png`)
+  downloadDataUrl(src, `carpe-diem-print-${safe}.png`)
   return true
 }
 
@@ -26,7 +26,7 @@ export function downloadDesignJson(upload: AdminUpload) {
     const parsed = JSON.parse(upload.designJson) as unknown
     const safe =
       (upload.orderId || upload.id).toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'design'
-    downloadJson(parsed, `aasha-sm-design-${safe}.json`)
+    downloadJson(parsed, `carpe-diem-design-${safe}.json`)
     return true
   } catch {
     return false
@@ -41,6 +41,6 @@ export function downloadMockupPng(upload: AdminUpload) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'mockup'
-  downloadDataUrl(src, `aasha-sm-mockup-${safe}.png`)
+  downloadDataUrl(src, `carpe-diem-mockup-${safe}.png`)
   return true
 }
