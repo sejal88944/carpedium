@@ -5,6 +5,23 @@ const MEN_SURFACE_LIGHT = '#eeeeec'
 
 export const CATALOG: Product[] = [
   {
+    slug: 'men-cockroach-janta-party',
+    title: 'Cockroach Janta Party Tee',
+    description:
+      'Black premium cotton tee — bold “Cockroach Janta Party” chest graphic (front) + “Nuclear Proof Society.” typography on upper back. Streetwear drop, 220 GSM.',
+    category: 'Men T-Shirts',
+    price: 399,
+    compareAt: 649,
+    imageTone: 'from-zinc-900 to-black',
+    image: '/designs/men/men-cockroach-front.png',
+    imageBack: '/designs/men/men-cockroach-back.png',
+    gallery: ['/designs/men/men-cockroach-front.png', '/designs/men/men-cockroach-back.png'],
+    surface: '#e8e8e6',
+    tags: ['men', 'streetwear', 'graphic', 'front-back'],
+    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
+    featured: true,
+  },
+  {
     slug: 'plain-white-essential',
     title: 'Plain White Essential Tee',
     description: 'Premium 220 GSM combed cotton plain white tee — the perfect blank canvas.',

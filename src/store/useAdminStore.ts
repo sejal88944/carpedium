@@ -18,9 +18,15 @@ export type AdminProduct = {
   sizes: string[]
   colors?: string[]
   image?: string
+  /** All mockup URLs — front, back, extra (shown in one shop card). */
+  images?: string[]
+  imageBack?: string
+  gallery?: string[]
   surface?: string
   tags?: string[]
   featured?: boolean
+  /** false = draft (hidden on shop). true or undefined = published. */
+  active?: boolean
   createdAt: string
 }
 
@@ -261,7 +267,19 @@ export const useAdminStore = create<State & Actions>()(
       ...EMPTY,
 
       addProduct: (p) =>
-        set((s) => ({ products: [{ id: id(), createdAt: now(), ...p }, ...s.products] })),
+        set((s) => ({
+          products: [
+            {
+              id: id(),
+              createdAt: now(),
+              active: true,
+              featured: false,
+              ...p,
+              active: p.active !== false,
+            },
+            ...s.products,
+          ],
+        })),
       updateProduct: (pid, patch) =>
         set((s) => ({
           products: s.products.map((p) => (p.id === pid ? { ...p, ...patch } : p)),
@@ -413,10 +431,14 @@ export const useAdminStore = create<State & Actions>()(
     }),
     {
       name: 'aasha-admin-store',
-      version: 3,
+      version: 4,
       migrate: (persisted) => {
         const s = persisted as Partial<State>
-        return { ...EMPTY, ...s, messages: s?.messages ?? [], uploads: s?.uploads ?? [] }
+        const products = (s?.products ?? []).map((p) => ({
+          ...p,
+          active: (p as AdminProduct).active !== false,
+        }))
+        return { ...EMPTY, ...s, products, messages: s?.messages ?? [], uploads: s?.uploads ?? [] }
       },
     },
   ),

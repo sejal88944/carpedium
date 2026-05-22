@@ -20,6 +20,7 @@ export type CartItem = {
   printArtworkHeightPx?: number
   printWidthMm?: number
   printHeightMm?: number
+  orderId?: string
 }
 
 type CartStore = {
@@ -86,7 +87,7 @@ export const useCart = create<CartStore>()(
     }),
     {
       name: 'aasha-cart',
-      version: 3,
+      version: 4,
       migrate: (persisted) => {
         const s = persisted as Partial<CartStore> | undefined
         if (!s) return { items: [], wishlist: [], recentlyViewed: [], coupon: null } as Partial<CartStore>

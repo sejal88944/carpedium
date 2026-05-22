@@ -8,6 +8,10 @@ export type Product = {
   compareAt?: number
   imageTone: string
   image?: string
+  /** Second mockup (back print) — shown beside front in one product card. */
+  imageBack?: string
+  /** 2–3 views in one card (overrides image + imageBack when set). */
+  gallery?: string[]
   surface?: string
   tags: string[]
   sizes: string[]

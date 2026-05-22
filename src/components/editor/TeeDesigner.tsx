@@ -3,25 +3,36 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
 } from 'react'
 import { Canvas, FabricImage, FabricObject, IText, Line, Rect } from 'fabric'
-import { useRouter } from 'next/navigation'
 import { COMPANY, TEE_COLORS, type TeeColorId } from '@/data/brand'
 import { useCart } from '@/store/useCart'
 import { useAdminStore } from '@/store/useAdminStore'
-import { openWhatsAppOrder } from '@/lib/whatsappOrder'
+import { buildWhatsAppOrderUrl } from '@/lib/whatsappOrder'
+import { PdfWhatsAppHint } from '@/components/order/PdfWhatsAppHint'
+import { DETAILS_FILLED_PDF_HINT } from '@/data/orderHints'
 import {
   compressArtworkForCartStorage,
   downloadDataUrl,
   exportArtworkFromFabric,
   stashPrintArtworkForCartItem,
 } from '@/lib/designArtworkExport'
-import { downloadDesignPdf } from '@/lib/designPdf'
+import { generateDesignPdfBundle } from '@/lib/designPdf'
 import { openPrintDialogForRasterDesign } from '@/lib/printDesignSheet'
+import {
+  downloadStoredInvoicePdf,
+  stashDesignExport,
+} from '@/lib/designExportStore'
+import { AddToCartSuccessModal } from '@/components/editor/AddToCartSuccessModal'
+import { AddToCartLoadingOverlay } from '@/components/editor/AddToCartLoadingOverlay'
+import { DesignMobileActionBar } from '@/components/editor/DesignMobileActionBar'
+import { artworkExportMultiplier, isMobileClient } from '@/lib/isMobileClient'
+import { useDebouncedCanvasFit } from '@/lib/useDebouncedCanvasFit'
 import { tintTeeMockup } from '@/lib/teeMockup'
 import { getPrintAreaForSide, getTeeBounds, getTeeLayout } from '@/lib/teeShape'
 import {
@@ -513,7 +524,6 @@ function getEditableText(canvas: Canvas): IText | null {
 }
 
 export function TeeDesigner({ initialColorId = 'black' }: Props) {
-  const router = useRouter()
   const { add } = useCart()
   const addUpload = useAdminStore((s) => s.addUpload)
   const upsertCustomer = useAdminStore((s) => s.upsertCustomer)
@@ -543,6 +553,15 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+  const [cartBusy, setCartBusy] = useState(false)
+  const [addCartModal, setAddCartModal] = useState<{
+    cartItemId: string
+    orderId: string
+    invoiceFileName: string
+  } | null>(null)
+  const [lastExportCartItemId, setLastExportCartItemId] = useState<string | null>(null)
+  const [cartLoadingMsg, setCartLoadingMsg] = useState('')
+  const canvasWrapRef = useRef<HTMLDivElement>(null)
 
   // One-time fetch + persist of customer contact details so returning users
   // don't have to re-type their name / phone / email each time.
@@ -651,6 +670,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       fabricRef.current = null
     }
   }, [initCanvas])
+
+  useDebouncedCanvasFit(canvasWrapRef, fabricRef, [side, colorId])
 
   useEffect(() => {
     let cancelled = false
@@ -832,6 +853,119 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     syncPreview()
   }
 
+  const isMobile = isMobileClient()
+
+  function schedulePdfAndAdmin(opts: {
+    cartItemId: string
+    orderId: string
+    pdfMeta: Parameters<typeof generateDesignPdfBundle>[0]
+    printArtwork: string
+    printCrop: string
+    hires: string
+    thumb: string
+    item: {
+      title: string
+      size: string
+      qty: number
+      price: number
+      color: string
+    }
+    artworkExport: Awaited<ReturnType<typeof exportArtworkFromFabric>> | null
+    designerNotes?: string
+    printTab: Window | null
+  }) {
+    const {
+      cartItemId,
+      orderId,
+      pdfMeta,
+      printArtwork,
+      printCrop,
+      hires,
+      item,
+      artworkExport,
+      designerNotes,
+      printTab,
+    } = opts
+
+    window.setTimeout(() => {
+      try {
+        const bundle = generateDesignPdfBundle(pdfMeta)
+        stashDesignExport(cartItemId, {
+          orderId: bundle.orderId,
+          invoiceFileName: bundle.invoiceFileName,
+          printOnlyFileName: bundle.printOnlyFileName,
+          invoicePdfDataUrl: bundle.invoicePdfDataUrl,
+          printOnlyPdfDataUrl: bundle.printOnlyPdfDataUrl,
+          printArtworkDataUrl: printArtwork,
+          mockupDataUrl: hires?.startsWith('data:') ? hires : undefined,
+          meta: { ...pdfMeta, orderId: bundle.orderId },
+          savedAt: new Date().toISOString(),
+        })
+        setAddCartModal((prev) =>
+          prev?.cartItemId === cartItemId
+            ? { ...prev, invoiceFileName: bundle.invoiceFileName }
+            : prev,
+        )
+      } catch (err) {
+        console.error('pdf generate failed', err)
+      }
+
+      if (!isMobile && printCrop.startsWith('data:image/')) {
+        try {
+          const printed = openPrintDialogForRasterDesign(printCrop, printTab)
+          if (!printed && printTab) printTab.close()
+        } catch {
+          /* ignore */
+        }
+      } else if (printTab) {
+        try {
+          printTab.close()
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (hires?.startsWith('data:')) {
+        try {
+          addUpload({
+            type: 'image',
+            label: fileName || `Custom design · ${color.name}`,
+            url: hires,
+            status: 'pending',
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            customerEmail: customerEmail.trim() || undefined,
+            pdfFileName: `carpe-diem-invoice-${orderId}.pdf`,
+            printArtworkUrl:
+              artworkExport?.transparentPng?.startsWith('data:')
+                ? artworkExport.transparentPng
+                : printArtwork || undefined,
+            mockupPreviewUrl: hires,
+            designJson: artworkExport ? JSON.stringify(artworkExport.designJson) : undefined,
+            orderId,
+            printType: 'Custom print',
+            color: color.name,
+            size: item.size,
+            quantity: item.qty,
+            price: item.price,
+            notes: designerNotes,
+          })
+        } catch (err) {
+          console.error('admin upload failed', err)
+        }
+      }
+    }, isMobile ? 400 : 120)
+  }
+
+  async function handleMobileDownloadPdf() {
+    const exportId = addCartModal?.cartItemId || lastExportCartItemId
+    if (!exportId) {
+      alert('Add to cart first — PDF download button active hoil.')
+      return
+    }
+    await downloadStoredInvoicePdf(exportId)
+  }
+
   async function handleAddToCart() {
     if (!customerName.trim() || !customerPhone.trim()) {
       alert('Please enter your name and phone number so we can confirm your order.')
@@ -842,13 +976,19 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       return
     }
 
+    setCartBusy(true)
+    setCartLoadingMsg('Preparing your design…')
+
     let printTab: Window | null = null
-    try {
-      printTab = window.open('', '_blank', 'noopener,noreferrer,width=920,height=1200')
-    } catch {
-      printTab = null
+    if (!isMobile) {
+      try {
+        printTab = window.open('', '_blank', 'noopener,noreferrer,width=920,height=1200')
+      } catch {
+        printTab = null
+      }
     }
 
+    try {
     persistCustomer()
 
     try {
@@ -895,6 +1035,8 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     const orderId = `ORD-${Date.now().toString(36).toUpperCase()}`
     const orderDate = new Date().toISOString()
 
+    setCartLoadingMsg('Exporting artwork…')
+
     let artworkExport: Awaited<ReturnType<typeof exportArtworkFromFabric>> = null
     if (canvas) {
       try {
@@ -904,8 +1046,9 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           teeColorHex: color.hex,
           canvasWidth: W,
           canvasHeight: H,
-          multiplier: 6,
+          multiplier: artworkExportMultiplier(),
         })
+        canvas.requestRenderAll()
       } catch (e) {
         console.warn('artwork export failed', e)
       }
@@ -948,20 +1091,6 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       }
     }
 
-    try {
-      add({ ...item, printArtwork: printArtworkForCart })
-    } catch {
-      try {
-        add({ ...item, previewImage: undefined, printArtwork: printArtworkForCart })
-      } catch {
-        add({ ...item, previewImage: undefined, printArtwork: undefined })
-      }
-    }
-
-    // Generate + download the design PDF so the customer has a file ready to
-    // attach in WhatsApp. wa.me deep links cannot attach files themselves.
-    let pdfFileName: string | undefined
-    let pdfDataUrl: string | undefined
     if (!printArtwork.startsWith('data:')) {
       alert(
         'Please add your design on the T-shirt first — upload a logo, add text, or place an emoji — then Add to cart.',
@@ -976,61 +1105,58 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       return
     }
 
-    if (printArtwork.startsWith('data:')) {
+    setCartLoadingMsg('Adding to cart…')
+
+    const pdfMeta = {
+      title: item.title,
+      color: item.color,
+      size: item.size,
+      quantity: item.qty,
+      price: item.price,
+      notes: text ? `Text: ${text}` : undefined,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      customerEmail: customerEmail.trim() || undefined,
+      customerAddress: customerAddress.trim() || undefined,
+      printType: 'Custom print (DTG / transfer ready)',
+      orderId,
+      orderDate,
+      artworkDataUrl: printArtwork,
+      printWidthMm: artworkExport?.printWidthMm,
+      printHeightMm: artworkExport?.printHeightMm,
+      artworkWidthPx: artworkExport?.widthPx,
+      artworkHeightPx: artworkExport?.heightPx,
+      printAspectRatio: artworkExport?.aspectRatio ?? print.width / print.height,
+      designText: text.trim() || undefined,
+      mockupPreviewUrl:
+        hires?.startsWith('data:') ? hires : thumb?.startsWith('data:') ? thumb : undefined,
+    }
+
+    try {
+      add({
+        ...item,
+        orderId,
+        printArtwork: printArtworkForCart,
+      })
+    } catch {
       try {
-        const result = await downloadDesignPdf(
-          {
-            title: item.title,
-            color: item.color,
-            size: item.size,
-            quantity: item.qty,
-            price: item.price,
-            notes: text ? `Text: ${text}` : undefined,
-            customerName: customerName.trim(),
-            customerPhone: customerPhone.trim(),
-            customerEmail: customerEmail.trim() || undefined,
-            customerAddress: customerAddress.trim() || undefined,
-            printType: 'Custom print (DTG / transfer ready)',
-            orderId,
-            orderDate,
-            artworkDataUrl: printArtwork,
-            printWidthMm: artworkExport?.printWidthMm,
-            printHeightMm: artworkExport?.printHeightMm,
-            artworkWidthPx: artworkExport?.widthPx,
-            artworkHeightPx: artworkExport?.heightPx,
-            printAspectRatio: artworkExport?.aspectRatio ?? print.width / print.height,
-            designText: text.trim() || undefined,
-            mockupPreviewUrl:
-              hires?.startsWith('data:') ? hires : thumb?.startsWith('data:') ? thumb : undefined,
-          },
-          printArtwork,
-        )
-        pdfFileName = result.fileName
-        pdfDataUrl = result.dataUrl
-        if (printArtwork.startsWith('data:')) {
-          await downloadDataUrl(printArtwork, `carpe-diem-print-artwork-${orderId}.png`)
-        }
-      } catch (err) {
-        console.error('pdf export failed', err)
+        add({ ...item, orderId, previewImage: undefined, printArtwork: printArtworkForCart })
+      } catch {
+        add({ ...item, orderId, previewImage: undefined, printArtwork: undefined })
       }
     }
 
-    if (printCrop.startsWith('data:image/')) {
-      const printed = openPrintDialogForRasterDesign(printCrop, printTab)
-      if (!printed && printTab) {
-        try {
-          printTab.close()
-        } catch {
-          /* ignore */
-        }
-      }
-    } else if (printTab) {
-      try {
-        printTab.close()
-      } catch {
-        /* ignore */
-      }
-    }
+    setLastExportCartItemId(cartItemId)
+
+    await new Promise<void>((r) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => r()))
+    })
+
+    setAddCartModal({
+      cartItemId,
+      orderId,
+      invoiceFileName: `carpe-diem-invoice-${orderId}.pdf`,
+    })
 
     const designerNotes = [
       text.trim() ? `Text: ${text.trim()}` : '',
@@ -1039,71 +1165,39 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
       .filter(Boolean)
       .join('\n') || undefined
 
-    if (hires && hires.startsWith('data:')) {
-      try {
-        addUpload({
-          type: 'image',
-          label: fileName || `Custom design · ${color.name}`,
-          url: hires,
-          status: 'pending',
-          customerName: customerName.trim(),
-          customerPhone: customerPhone.trim(),
-          customerEmail: customerEmail.trim() || undefined,
-          pdfUrl: pdfDataUrl,
-          pdfFileName,
-          printArtworkUrl:
-            artworkExport?.transparentPng?.startsWith('data:')
-              ? artworkExport.transparentPng
-              : printArtwork || undefined,
-          mockupPreviewUrl: hires.startsWith('data:') ? hires : undefined,
-          designJson: artworkExport
-            ? JSON.stringify(artworkExport.designJson)
-            : undefined,
-          orderId,
-          printType: 'Custom print',
-          color: color.name,
-          size: item.size,
-          quantity: item.qty,
-          price: item.price,
-          notes: designerNotes,
-        })
-      } catch (err) {
-        console.error('admin upload failed', err)
-        // Fallback: try saving without the heavy PDF payload to avoid quota errors.
+    schedulePdfAndAdmin({
+      cartItemId,
+      orderId,
+      pdfMeta,
+      printArtwork,
+      printCrop,
+      hires,
+      thumb,
+      item,
+      artworkExport,
+      designerNotes,
+      printTab,
+    })
+    } catch (err) {
+      console.error('add to cart failed', err)
+      alert('Could not add to cart. Please try again — keep your design and tap Add to Cart once more.')
+      if (printTab) {
         try {
-          addUpload({
-            type: 'image',
-            label: fileName || `Custom design · ${color.name}`,
-            url: hires,
-            status: 'pending',
-            customerName: customerName.trim(),
-            customerPhone: customerPhone.trim(),
-            customerEmail: customerEmail.trim() || undefined,
-            pdfFileName,
-            printArtworkUrl:
-            artworkExport?.transparentPng?.startsWith('data:')
-              ? artworkExport.transparentPng
-              : printArtwork || undefined,
-            orderId,
-            color: color.name,
-            size: item.size,
-            quantity: item.qty,
-            price: item.price,
-            notes: designerNotes,
-          })
+          printTab.close()
         } catch {
           /* ignore */
         }
       }
+    } finally {
+      setCartBusy(false)
+      setCartLoadingMsg('')
     }
-
-    openWhatsAppOrder([item], pdfFileName ? { pdfFileName } : {})
-    router.push('/cart')
   }
 
   /** High-res PNG for download / admin upload. */
   function exportPreview() {
-    return fabricRef.current?.toDataURL({ format: 'png', multiplier: 2 }) ?? ''
+    const mult = isMobileClient() ? 1 : 2
+    return fabricRef.current?.toDataURL({ format: 'png', multiplier: mult }) ?? ''
   }
 
   /**
@@ -1134,19 +1228,61 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
     }
   }
 
-  const whatsappText = encodeURIComponent(
-    `Hi ${COMPANY.shortName}, I want to order a custom T-shirt. Quantity: ${quantity}, Total: ₹${total}`,
-  )
+  const detailsFilled =
+    !!customerName.trim() && !!customerPhone.trim() && !!customerAddress.trim()
+
+  const whatsappOrderUrl = useMemo(() => {
+    const unitPrice = BASE_PRICE + PRINT_CHARGE
+    return buildWhatsAppOrderUrl(
+      [
+        {
+          title: `Custom ${color.name} Tee${text ? ` · “${text}”` : ''}`,
+          qty: quantity,
+          price: unitPrice,
+          size: 'M',
+          color: color.name,
+          previewImage: detailsFilled ? 'custom' : undefined,
+        },
+      ],
+      {
+        pdfFileName: addCartModal?.invoiceFileName,
+        customer: detailsFilled
+          ? {
+              name: customerName.trim(),
+              phone: customerPhone.trim(),
+              email: customerEmail.trim() || undefined,
+              address: customerAddress.trim(),
+            }
+          : undefined,
+        pricing: {
+          subtotal: unitPrice * quantity,
+          total: total,
+        },
+      },
+    )
+  }, [
+    color.name,
+    text,
+    quantity,
+    total,
+    detailsFilled,
+    customerName,
+    customerPhone,
+    customerEmail,
+    customerAddress,
+    addCartModal?.invoiceFileName,
+  ])
 
   return (
-    <div className="grid gap-8 lg:gap-10 xl:grid-cols-[1.2fr_0.8fr]">
-      <section className="min-h-0 rounded-[1.5rem] border border-black/5 bg-gradient-to-br from-slate-50 via-white to-slate-200 p-3 shadow-2xl dark:border-white/10 dark:from-zinc-950 dark:via-void-2 dark:to-slate-900 sm:rounded-[2.25rem] sm:p-6 md:p-8 lg:min-h-[520px]">
+    <>
+    <div className="grid w-full max-w-full grid-cols-1 gap-6 pb-36 sm:gap-8 lg:gap-10 lg:pb-8 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="min-h-0 w-full max-w-full overflow-hidden rounded-[1.5rem] border border-black/5 bg-gradient-to-br from-slate-50 via-white to-slate-200 p-3 shadow-2xl dark:border-white/10 dark:from-zinc-950 dark:via-void-2 dark:to-slate-900 sm:rounded-[2.25rem] sm:p-6 md:p-8 lg:min-h-[520px]">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-brand">
               Live Preview Area
             </p>
-            <h2 className="mt-1 font-display text-2xl font-bold">T-shirt mockup preview</h2>
+            <h2 className="mt-1 font-display text-xl font-bold sm:text-2xl">T-shirt mockup preview</h2>
           </div>
           <div className="rounded-full bg-white p-1 shadow-sm dark:bg-white/10">
             {(['front', 'back'] as const).map((s) => (
@@ -1169,7 +1305,10 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           </p>
         ) : null}
 
-        <div className="group relative mx-auto flex w-full min-h-[min(70vw,420px)] max-w-full items-center justify-center overflow-hidden rounded-[1.25rem] bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.96),rgba(226,232,240,0.8))] p-2 transition sm:min-h-[480px] sm:max-w-3xl sm:rounded-[2rem] sm:p-4 dark:bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.8),rgba(9,9,11,0.96))]">
+        <div
+          ref={canvasWrapRef}
+          className="group relative mx-auto flex w-full min-h-[min(72vw,380px)] max-w-full items-start justify-center overflow-hidden rounded-[1.25rem] bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.96),rgba(226,232,240,0.8))] p-2 transition sm:min-h-[420px] sm:max-w-3xl sm:rounded-[2rem] sm:p-4 dark:bg-[radial-gradient(circle_at_center,rgba(39,39,42,0.8),rgba(9,9,11,0.96))]"
+        >
           <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:32px_32px]" />
           <div
             ref={gridNoticeRef}
@@ -1177,7 +1316,7 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
           >
             Grid helper active · snap alignment enabled
           </div>
-          <canvas ref={ref} className="relative z-10 mx-auto h-auto w-full max-w-[min(100%,560px)] drop-shadow-2xl" />
+          <canvas ref={ref} className="relative z-10 mx-auto block max-w-full drop-shadow-2xl" />
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_220px]">
@@ -1568,15 +1707,23 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                   className="w-full resize-y rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none ring-brand/30 focus:ring-4 dark:border-white/10 dark:bg-void-3"
                 />
               </div>
+              {detailsFilled ? (
+                <PdfWhatsAppHint
+                  variant="details"
+                  message={DETAILS_FILLED_PDF_HINT}
+                  className="mt-4"
+                />
+              ) : null}
             </section>
 
             <section className="space-y-3">
               <button
                 type="button"
+                disabled={cartBusy}
                 onClick={() => void handleAddToCart()}
-                className="w-full rounded-full bg-gradient-to-r from-sky-500 to-blue-700 py-4 text-sm font-bold text-white shadow-glow transition hover:scale-[1.01]"
+                className="hidden w-full rounded-full bg-gradient-to-r from-sky-500 to-blue-700 py-4 text-sm font-bold text-white shadow-glow transition hover:scale-[1.01] disabled:opacity-60 lg:block"
               >
-                Add to Cart
+                {cartBusy ? 'Saving design & PDF…' : 'Add to Cart'}
               </button>
               <a
                 href={exportPreview()}
@@ -1586,17 +1733,42 @@ export function TeeDesigner({ initialColorId = 'black' }: Props) {
                 Download HD Preview
               </a>
               <a
-                href={`https://wa.me/${COMPANY.whatsapp}?text=${whatsappText}`}
+                href={whatsappOrderUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="block w-full rounded-full bg-[#25D366] py-4 text-center text-sm font-bold text-white transition hover:scale-[1.01]"
               >
                 Order on WhatsApp
               </a>
+              {detailsFilled ? (
+                <p className="text-center text-[11px] font-medium leading-relaxed text-amber-700 dark:text-amber-300">
+                  WhatsApp वर order करताना Chrome मधील PDF 📎 attach करा
+                </p>
+              ) : null}
             </section>
           </div>
         </div>
       </aside>
     </div>
+
+    {cartBusy ? <AddToCartLoadingOverlay message={cartLoadingMsg || undefined} /> : null}
+
+    <DesignMobileActionBar
+      cartBusy={cartBusy}
+      hasSavedExport={!!(addCartModal?.cartItemId || lastExportCartItemId)}
+      onAddToCart={() => void handleAddToCart()}
+      onDownloadPdf={() => void handleMobileDownloadPdf()}
+      whatsappHref={whatsappOrderUrl}
+    />
+
+    {addCartModal ? (
+      <AddToCartSuccessModal
+        cartItemId={addCartModal.cartItemId}
+        orderId={addCartModal.orderId}
+        invoiceFileName={addCartModal.invoiceFileName}
+        onClose={() => setAddCartModal(null)}
+      />
+    ) : null}
+    </>
   )
 }

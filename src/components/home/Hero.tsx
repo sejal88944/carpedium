@@ -7,7 +7,7 @@ import { PlainTeeMockup } from '@/components/tee/PlainTeeMockup'
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-brand/30 py-24 text-white md:py-32">
+    <section className="relative w-full max-w-full overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-brand/30 py-16 text-white sm:py-24 md:py-32">
       <motion.div
         className="absolute -left-20 top-20 h-72 w-72 rounded-full bg-brand/30 blur-3xl"
         animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
@@ -31,7 +31,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="mt-4 max-w-3xl font-display text-4xl font-bold leading-tight md:text-6xl"
+            className="mt-4 max-w-3xl font-display text-3xl font-bold leading-tight sm:text-4xl md:text-6xl"
           >
             Premium Custom T-Shirt Printing for Brands & Businesses
           </motion.h1>

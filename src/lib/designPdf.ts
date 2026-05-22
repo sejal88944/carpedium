@@ -377,17 +377,60 @@ export type DesignPdfResult = {
   download?: DownloadResult
 }
 
+/** Single-page print-ready PDF (page 2 only). */
+export function buildPrintOnlyPdf(meta: DesignPdfMeta): jsPDF {
+  const pdf = new jsPDF({
+    unit: 'mm',
+    format: 'a4',
+    orientation: 'portrait',
+    compress: true,
+  })
+  drawPrintReadyPage(pdf, meta)
+  return pdf
+}
+
+export type DesignPdfBundle = {
+  orderId: string
+  invoiceFileName: string
+  printOnlyFileName: string
+  invoicePdfDataUrl: string
+  printOnlyPdfDataUrl: string
+}
+
+export function generateDesignPdfBundle(meta: DesignPdfMeta): DesignPdfBundle {
+  const orderId = meta.orderId || `ORD-${Date.now()}`
+  const safe =
+    meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'design'
+  const stamp = Date.now()
+  const invoiceFileName = `carpe-diem-invoice-${safe}-${stamp}.pdf`
+  const printOnlyFileName = `carpe-diem-print-${safe}-${stamp}.pdf`
+  const invoicePdf = buildDesignPdf({ ...meta, orderId })
+  const printOnlyPdf = buildPrintOnlyPdf({ ...meta, orderId })
+  return {
+    orderId,
+    invoiceFileName,
+    printOnlyFileName,
+    invoicePdfDataUrl: pdfDataUri(invoicePdf),
+    printOnlyPdfDataUrl: pdfDataUri(printOnlyPdf),
+  }
+}
+
 export async function downloadDesignPdf(
   meta: DesignPdfMeta,
   printPngDataUrl?: string,
 ): Promise<DesignPdfResult> {
-  const orderId = meta.orderId || `ORD-${Date.now()}`
-  const safe =
-    meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'design'
-  const fileName = `carpe-diem-invoice-${safe}-${Date.now()}.pdf`
-  const pdf = buildDesignPdf({ ...meta, orderId })
-  const download = await savePdfFile(pdf, fileName)
-  return { fileName, dataUrl: pdfDataUri(pdf), orderId, printPngDataUrl, download }
+  const bundle = generateDesignPdfBundle(meta)
+  const download = await savePdfFile(
+    buildDesignPdf({ ...meta, orderId: bundle.orderId }),
+    bundle.invoiceFileName,
+  )
+  return {
+    fileName: bundle.invoiceFileName,
+    dataUrl: bundle.invoicePdfDataUrl,
+    orderId: bundle.orderId,
+    printPngDataUrl,
+    download,
+  }
 }
 
 // ── Cart / order-summary PDF ───────────────────────────────────────────────

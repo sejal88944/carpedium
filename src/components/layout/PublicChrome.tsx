@@ -13,11 +13,19 @@ export function PublicChrome({ children }: { children: React.ReactNode }) {
     return <main className="min-h-screen">{children}</main>
   }
 
+  const isDesign = pathname.startsWith('/design')
+
   return (
     <>
       <Navbar />
-      <main className="min-h-screen overflow-x-hidden pt-20 pb-safe-mobile md:pb-0">{children}</main>
-      <Footer />
+      <main
+        className={`min-h-dvh w-full max-w-full overflow-x-hidden pt-16 sm:pt-20 ${
+          isDesign ? 'pb-32 sm:pb-28 md:pb-8' : 'pb-safe-mobile md:pb-0'
+        }`}
+      >
+        {children}
+      </main>
+      <Footer compactMobile={isDesign} />
       <FloatingCTA />
     </>
   )

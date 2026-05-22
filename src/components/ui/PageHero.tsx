@@ -24,7 +24,7 @@ export function PageHero({
   const dark = variant === 'dark'
   return (
     <section
-      className={`relative overflow-hidden border-b border-black/5 py-20 md:py-28 ${
+      className={`relative w-full max-w-full overflow-hidden border-b border-black/5 py-12 sm:py-16 md:py-28 ${
         dark
           ? 'bg-gradient-to-br from-void via-void-2 to-slate-900 text-white'
           : 'bg-gradient-to-br from-sky-50 via-white to-slate-100 dark:from-void dark:via-void-2 dark:to-slate-950'
@@ -48,7 +48,7 @@ export function PageHero({
         <motion.h1
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`mt-4 max-w-3xl font-display text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl ${
+          className={`mt-4 max-w-3xl font-display text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl lg:text-6xl ${
             dark ? 'text-white' : ''
           }`}
         >

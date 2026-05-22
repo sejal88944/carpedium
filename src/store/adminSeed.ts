@@ -70,9 +70,20 @@ function seedNow() {
       sizes: [...p.sizes],
       colors: [],
       image: p.image,
+      imageBack: p.imageBack,
+      gallery: p.gallery,
+      images:
+        p.gallery && p.gallery.length > 0
+          ? [...p.gallery]
+          : p.image && p.imageBack
+            ? [p.image, p.imageBack]
+            : p.image
+              ? [p.image]
+              : [],
       surface: p.surface,
       tags: [...p.tags],
       featured: p.featured,
+      active: true,
       createdAt: new Date(Date.now() - i * 86_400_000).toISOString(),
     }))
   }
@@ -107,6 +118,45 @@ export function reseedAdminStore() {
   seedNow()
 }
 
+/** True after zustand-persist has loaded admin data (same tab or other tab). */
+export function useStorefrontCatalogReady(): boolean {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const persist = useAdminStore.persist
+    if (!persist) {
+      setReady(true)
+      return
+    }
+    if (persist.hasHydrated()) {
+      setReady(true)
+      return
+    }
+    return persist.onFinishHydration(() => setReady(true))
+  }, [])
+
+  return ready
+}
+
+/** Static catalog + admin overrides + new admin-only products. */
+export function mergeStorefrontCatalog(storeProducts: AdminProduct[]): Product[] {
+  const bySlug = new Map<string, Product>()
+
+  for (const p of CATALOG) {
+    bySlug.set(p.slug, { ...p })
+  }
+
+  for (const p of storeProducts) {
+    if (p.active === false) {
+      bySlug.delete(p.slug)
+      continue
+    }
+    bySlug.set(p.slug, adminToStorefront(p))
+  }
+
+  return Array.from(bySlug.values())
+}
+
 /** Convert AdminProduct → storefront Product shape (1:1 mapping). */
 function adminToStorefront(p: AdminProduct): Product {
   const fallbackTone = 'from-zinc-900 to-black'
@@ -119,7 +169,16 @@ function adminToStorefront(p: AdminProduct): Product {
     price: p.price,
     compareAt: p.compareAt,
     imageTone: fallbackTone,
-    image: p.image,
+    image: p.images?.[0] ?? p.image,
+    imageBack: p.images?.[1] ?? p.imageBack,
+    gallery:
+      p.gallery && p.gallery.length >= 2
+        ? p.gallery.slice(0, 3)
+        : p.images && p.images.length >= 2
+          ? p.images.slice(0, 3)
+          : p.image && p.imageBack
+            ? [p.image, p.imageBack]
+            : undefined,
     surface: p.surface,
     tags: p.tags ?? [],
     sizes: p.sizes,
@@ -136,21 +195,10 @@ function adminToStorefront(p: AdminProduct): Product {
  * up products that admins add / edit / delete in the panel.
  */
 export function useStorefrontProducts(): Product[] {
-  const [hydrated, setHydrated] = useState(false)
+  const ready = useStorefrontCatalogReady()
   const storeProducts = useAdminStore((s) => s.products)
 
-  useEffect(() => {
-    const persist = useAdminStore.persist
-    if (persist && !persist.hasHydrated()) {
-      const unsub = persist.onFinishHydration(() => setHydrated(true))
-      if (persist.hasHydrated()) setHydrated(true)
-      return unsub
-    }
-    setHydrated(true)
-  }, [])
-
-  if (!hydrated) return CATALOG
-  if (storeProducts.length === 0) return CATALOG
-  return storeProducts.map(adminToStorefront)
+  if (!ready) return CATALOG
+  return mergeStorefrontCatalog(storeProducts)
 }
 

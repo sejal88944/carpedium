@@ -10,7 +10,14 @@ import { useCart, cartTotal } from '@/store/useCart'
 import { useAdminStore } from '@/store/useAdminStore'
 import { openWhatsAppOrder } from '@/lib/whatsappOrder'
 import { downloadCartPdf } from '@/lib/designPdf'
+import {
+  downloadStoredInvoicePdf,
+  downloadStoredPrintOnlyPdf,
+  isCustomCartItem,
+} from '@/lib/designExportStore'
 import { buildAvailableCoupons, resolveCoupon } from '@/lib/coupons'
+import { PdfWhatsAppHint } from '@/components/order/PdfWhatsAppHint'
+import { DETAILS_FILLED_PDF_HINT, pdfDownloadedAttachHint } from '@/data/orderHints'
 
 const SHIPPING_FLAT = 99
 const FREE_SHIPPING_MIN = 1500
@@ -40,6 +47,10 @@ export function CartView() {
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
   const [customerError, setCustomerError] = useState('')
+  const [itemDownloadBusy, setItemDownloadBusy] = useState<string | null>(null)
+  const [itemDownloadMsg, setItemDownloadMsg] = useState<{ id: string; text: string } | null>(
+    null,
+  )
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -78,6 +89,9 @@ export function CartView() {
   const total = afterDiscount + shipping
 
   const itemCount = useMemo(() => items.reduce((n, i) => n + i.qty, 0), [items])
+
+  const detailsFilled =
+    !!customerName.trim() && !!customerPhone.trim() && !!customerAddress.trim()
 
   // If the applied coupon goes invalid (e.g. customer removed items), drop it.
   useEffect(() => {
@@ -187,11 +201,7 @@ export function CartView() {
     try {
       const code = `ORD-${Date.now().toString(36).toUpperCase()}`
       const { fileName, download } = await downloadCartPdf(cartPdfItems(), cartPdfMeta(code))
-      if (download.openedInTab || download.shared) {
-        setPdfStatus('PDF ready — browser madhe Save / Share kara (phone).')
-      } else {
-        setPdfStatus(`Downloaded: ${fileName}`)
-      }
+      setPdfStatus(`${pdfDownloadedAttachHint()} (${fileName})`)
     } catch (err) {
       console.error('cart pdf download failed', err)
       setPdfStatus('PDF download failed — parat try kara.')
@@ -240,9 +250,7 @@ export function CartView() {
     try {
       const pdf = await downloadCartPdf(cartPdfItems(), cartPdfMeta(code))
       pdfFileName = pdf.fileName
-      if (pdf.download.openedInTab || pdf.download.shared) {
-        setPdfStatus('PDF ready — browser madhe Save / Share kara (phone).')
-      }
+      setPdfStatus(pdfDownloadedAttachHint())
     } catch (err) {
       console.error('cart pdf export failed', err)
     }
@@ -324,7 +332,7 @@ export function CartView() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="mx-auto max-w-7xl px-4 py-12 lg:px-8"
+      className="mx-auto w-full max-w-full overflow-x-hidden px-4 py-8 sm:py-12 lg:px-8"
     >
       <motion.p
         initial={{ opacity: 0, y: 8 }}
@@ -388,7 +396,7 @@ export function CartView() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]"
+        className="mt-8 grid w-full max-w-full grid-cols-1 gap-8 lg:grid-cols-[1fr_minmax(0,380px)] lg:gap-10"
       >
         <div className="space-y-4">
           <AnimatePresence mode="popLayout">
@@ -430,13 +438,85 @@ export function CartView() {
                       </span>
                     ) : null}
                   </motion.div>
-                  <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 overflow-hidden">
                     <div>
                       <h3 className="font-display text-lg font-bold leading-tight">{item.title}</h3>
                       <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
                         Size {item.size}
                         {item.color ? ` · ${item.color}` : ''}
+                        {item.orderId ? (
+                          <span className="block font-mono text-[11px] text-slate-400">
+                            {item.orderId}
+                          </span>
+                        ) : null}
                       </p>
+                      {isCustomCartItem(item.id, item.printArtwork) ? (
+                        <div className="mt-3 flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+                          <button
+                            type="button"
+                            disabled={itemDownloadBusy === `${item.id}-invoice`}
+                            onClick={async () => {
+                              setItemDownloadBusy(`${item.id}-invoice`)
+                              setItemDownloadMsg(null)
+                              try {
+                                const res = await downloadStoredInvoicePdf(item.id)
+                                setItemDownloadMsg({
+                                  id: item.id,
+                                  text: res.ok
+                                    ? res.openedInTab || res.shared
+                                      ? 'Invoice opened — Save / Share on your phone.'
+                                      : 'Invoice download started.'
+                                    : 'Invoice not ready — re-add design from designer.',
+                                })
+                              } finally {
+                                setItemDownloadBusy(null)
+                              }
+                            }}
+                            className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-blue-700 px-4 py-3 text-xs font-bold text-white disabled:opacity-60 sm:w-auto sm:min-w-[10rem]"
+                          >
+                            {itemDownloadBusy === `${item.id}-invoice`
+                              ? 'Preparing…'
+                              : 'Download Invoice'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={itemDownloadBusy === `${item.id}-print`}
+                            onClick={async () => {
+                              setItemDownloadBusy(`${item.id}-print`)
+                              setItemDownloadMsg(null)
+                              try {
+                                const res = await downloadStoredPrintOnlyPdf(item.id)
+                                setItemDownloadMsg({
+                                  id: item.id,
+                                  text: res.ok
+                                    ? res.openedInTab || res.shared
+                                      ? 'Print PDF opened — Save / Share on your phone.'
+                                      : 'Print design PDF download started.'
+                                    : 'Print PDF not ready — re-add design from designer.',
+                                })
+                              } finally {
+                                setItemDownloadBusy(null)
+                              }
+                            }}
+                            className="w-full rounded-xl border-2 border-brand px-4 py-3 text-xs font-bold text-brand disabled:opacity-60 sm:w-auto sm:min-w-[10rem]"
+                          >
+                            {itemDownloadBusy === `${item.id}-print`
+                              ? 'Preparing…'
+                              : 'Download Print Design'}
+                          </button>
+                          <Link
+                            href="/design"
+                            className="flex w-full items-center justify-center rounded-xl border border-black/10 px-4 py-3 text-xs font-bold sm:w-auto dark:border-white/10"
+                          >
+                            Re-edit Design
+                          </Link>
+                        </div>
+                      ) : null}
+                      {itemDownloadMsg?.id === item.id ? (
+                        <p className="mt-2 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                          {itemDownloadMsg.text}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2 rounded-full border border-black/10 bg-white/60 p-1 dark:border-white/10 dark:bg-void-3">
@@ -681,6 +761,13 @@ export function CartView() {
               {customerError ? (
                 <p className="text-xs font-semibold text-red-500">{customerError}</p>
               ) : null}
+              {detailsFilled ? (
+                <PdfWhatsAppHint
+                  variant="details"
+                  message={DETAILS_FILLED_PDF_HINT}
+                  className="mt-3"
+                />
+              ) : null}
             </div>
 
             <button
@@ -702,9 +789,13 @@ export function CartView() {
               <p className="mt-2 text-center text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                 {pdfStatus}
               </p>
+            ) : detailsFilled ? (
+              <p className="mt-2 text-center text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                WhatsApp वर order करताना Chrome मधील PDF 📎 attach करा
+              </p>
             ) : (
               <p className="mt-2 text-center text-[11px] text-slate-500 dark:text-zinc-500">
-                Phone var PDF download / Save — nantar WhatsApp order
+                Details भरा → PDF download → WhatsApp वर attach
               </p>
             )}
           </div>

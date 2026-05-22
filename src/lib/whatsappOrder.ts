@@ -99,11 +99,13 @@ export function buildWhatsAppOrderUrl(
   lines.push('')
 
   if (hasCustomDesign || options.pdfFileName) {
-    lines.push('📎 *Please attach the design PDF*')
+    lines.push('📎 *कृपया design PDF attach करा*')
     if (options.pdfFileName) {
       lines.push(`File: ${options.pdfFileName}`)
     }
-    lines.push('(It was just downloaded to your device — tap the 📎 attach icon in WhatsApp and pick it from Downloads.)')
+    lines.push(
+      'तुमच्या Chrome / phone browser मध्ये PDF download झाली असेल — WhatsApp मध्ये 📎 → Downloads / Files → PDF निवडा.',
+    )
     lines.push('')
   }
 

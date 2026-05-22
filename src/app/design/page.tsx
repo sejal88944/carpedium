@@ -12,14 +12,14 @@ export const metadata: Metadata = pageMeta({
 
 function DesignContent() {
   return (
-    <div className="bg-gradient-to-b from-slate-50 via-white to-slate-100 pb-24 pt-8 dark:from-void dark:via-void-2 dark:to-void">
-      <div className="mx-auto max-w-[1600px] px-4 py-8 lg:px-8">
-        <div className="mb-10 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-brand">
+    <div className="min-h-0 w-full max-w-full overflow-x-hidden bg-gradient-to-b from-slate-50 via-white to-slate-100 pt-4 dark:from-void dark:via-void-2 dark:to-void sm:pt-8">
+      <div className="page-shell mx-auto max-w-[1600px] py-4 sm:py-8">
+        <div className="mb-6 flex flex-col justify-between gap-4 sm:mb-10 lg:flex-row lg:items-end">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-brand sm:text-sm">
               Nike-style Customizer
             </p>
-            <h1 className="mt-3 font-display text-4xl font-bold tracking-tight md:text-6xl">
+            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight sm:mt-3 sm:text-4xl md:text-6xl">
               Custom Design Studio
             </h1>
             <p className="mt-3 max-w-2xl text-slate-600 dark:text-zinc-400">

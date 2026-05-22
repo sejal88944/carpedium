@@ -5,10 +5,14 @@ import { motion } from 'framer-motion'
 import { COMPANY } from '@/data/brand'
 import { BrandLogo } from '@/components/layout/BrandLogo'
 
-export function Footer() {
+export function Footer({ compactMobile = false }: { compactMobile?: boolean }) {
   return (
-    <footer className="mt-20 border-t border-black/5 bg-void-2 pb-24 pt-28 text-zinc-400 dark:border-white/10 md:pb-16">
-      <motion.div className="mx-auto grid max-w-7xl gap-12 px-4 sm:grid-cols-2 lg:grid-cols-4 lg:px-8">
+    <footer
+      className={`mt-12 w-full max-w-full overflow-x-hidden border-t border-black/5 bg-void-2 text-zinc-400 dark:border-white/10 sm:mt-20 ${
+        compactMobile ? 'pb-28 pt-16 sm:pb-24 sm:pt-20' : 'pb-24 pt-20 sm:pt-28 md:pb-16'
+      }`}
+    >
+      <motion.div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 px-4 sm:grid-cols-2 sm:gap-12 lg:grid-cols-4 lg:px-8">
         <div>
           <BrandLogo href="/" size="md" />
           <p className="mt-3 text-xs font-semibold uppercase tracking-[0.22em] text-amber-500/90">

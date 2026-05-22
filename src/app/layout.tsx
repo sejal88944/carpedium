@@ -14,6 +14,12 @@ const AppProviders = dynamic(() => import('@/components/providers/AppProviders')
   loading: () => <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950" aria-hidden />,
 })
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover' as const,
+}
+
 export const metadata: Metadata = {
   metadataBase: new URL(COMPANY.siteUrl),
   title: {
@@ -56,7 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className={`${inter.variable} ${syne.variable}`}>
+      <body className={`${inter.variable} ${syne.variable} min-h-dvh w-full max-w-full overflow-x-hidden`}>
         <AppProviders>{children}</AppProviders>
         <GoogleAnalytics />
       </body>

@@ -10,6 +10,10 @@ import { TEE_COLORS } from '@/data/brand'
 import { PlainTeeMockup } from '@/components/tee/PlainTeeMockup'
 import { useCart } from '@/store/useCart'
 import { QuickViewModal } from './QuickViewModal'
+import { CategoryPreviewCard } from './CategoryPreviewCard'
+import { ProductGalleryImage } from './ProductGalleryImage'
+import { CATEGORY_PREVIEWS, MENS_CATEGORY_PREVIEW } from '@/data/categoryPreviews'
+import { productGalleryImages } from '@/lib/productGallery'
 import type { Product } from '@/types'
 
 const CAT_QUERY_MAP: Record<string, string> = {
@@ -84,7 +88,12 @@ export function ProductListing() {
   }, [CATALOG, query, category, maxPrice, size, sort])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
-  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+  const paginatedRaw = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+  /** Mens spotlight card already shows this design — avoid duplicate grid card on page 1. */
+  const paginated =
+    category === 'Men T-Shirts' && page === 1
+      ? paginatedRaw.filter((p) => p.slug !== MENS_CATEGORY_PREVIEW.slug)
+      : paginatedRaw
 
   const filterPanel = (
     <div className="space-y-6">
@@ -103,30 +112,48 @@ export function ProductListing() {
       <div>
         <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Category</p>
         <div className="mt-3 flex flex-col gap-2">
-          {CATEGORY_OPTIONS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => {
-                setCategory(c.id)
-                setPage(1)
-              }}
-              className={`flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                category === c.id
-                  ? 'bg-brand text-white shadow-md'
-                  : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15'
-              }`}
-            >
-              <span>{c.label}</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  category === c.id ? 'bg-white/25 text-white' : 'bg-black/10 dark:bg-white/15'
+          {CATEGORY_OPTIONS.map((c) => {
+            const preview = CATEGORY_PREVIEWS[c.id]
+            if (preview) {
+              return (
+                <CategoryPreviewCard
+                  key={c.id}
+                  preview={preview}
+                  active={category === c.id}
+                  count={counts[c.id] ?? 0}
+                  variant="sidebar"
+                  onSelect={() => {
+                    setCategory(c.id)
+                    setPage(1)
+                  }}
+                />
+              )
+            }
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setCategory(c.id)
+                  setPage(1)
+                }}
+                className={`flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                  category === c.id
+                    ? 'bg-brand text-white shadow-md'
+                    : 'bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15'
                 }`}
               >
-                {counts[c.id] ?? 0}
-              </span>
-            </button>
-          ))}
+                <span>{c.label}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    category === c.id ? 'bg-white/25 text-white' : 'bg-black/10 dark:bg-white/15'
+                  }`}
+                >
+                  {counts[c.id] ?? 0}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
       <div>
@@ -212,8 +239,18 @@ export function ProductListing() {
         </aside>
 
         <div>
+          {category === 'Men T-Shirts' && CATEGORY_PREVIEWS['Men T-Shirts'] ? (
+            <CategoryPreviewCard
+              preview={CATEGORY_PREVIEWS['Men T-Shirts']!}
+              active
+              count={counts['Men T-Shirts']}
+              variant="spotlight"
+              className="mb-8"
+            />
+          ) : null}
           <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
             {paginated.map((product, i) => {
+              const gallery = productGalleryImages(product)
               const color = colorId !== 'all' ? TEE_COLORS.find((c) => c.id === colorId)! : productColor(product.slug)
               const rating = 4.7 + (i % 3) * 0.1
               const wished = wishlist.includes(product.slug)
@@ -226,7 +263,18 @@ export function ProductListing() {
                   className="group glass glass-hover overflow-hidden rounded-[1.5rem]"
                 >
                   <Link href={`/shop/${product.slug}`} className="block overflow-hidden">
-                    {product.image ? (
+                    {gallery ? (
+                      <ProductGalleryImage
+                        images={gallery}
+                        labels={
+                          product.slug === 'men-cockroach-janta-party'
+                            ? ['Front', 'Back']
+                            : undefined
+                        }
+                        alt={product.title}
+                        surface={product.surface}
+                      />
+                    ) : product.image ? (
                       <div
                         className="relative aspect-square w-full overflow-hidden"
                         style={{ backgroundColor: product.surface || '#f4f4f4' }}

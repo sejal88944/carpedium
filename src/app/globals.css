@@ -17,11 +17,26 @@
 html {
   scroll-behavior: smooth;
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 body {
   @apply bg-[var(--bg)] text-[var(--fg)] font-body antialiased;
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.min-h-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.page-shell {
+  @apply mx-auto w-full max-w-full overflow-x-hidden px-4 sm:px-6 lg:px-8;
 }
 
 .pb-safe-mobile {

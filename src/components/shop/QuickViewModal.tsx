@@ -9,6 +9,8 @@ import { PlainTeeMockup } from '@/components/tee/PlainTeeMockup'
 import { useCart } from '@/store/useCart'
 import { openWhatsAppOrder } from '@/lib/whatsappOrder'
 import type { Product } from '@/types'
+import { ProductGalleryImage } from './ProductGalleryImage'
+import { productGalleryImages } from '@/lib/productGallery'
 
 export function QuickViewModal({ product, onClose }: { product: Product; onClose: () => void }) {
   const { add } = useCart()
@@ -18,6 +20,7 @@ export function QuickViewModal({ product, onClose }: { product: Product; onClose
   const [colorIdx, setColorIdx] = useState(0)
   const [qty, setQty] = useState(1)
   const color = TEE_COLORS[colorIdx]
+  const gallery = productGalleryImages(product)
 
   return (
     <motion.div
@@ -34,7 +37,18 @@ export function QuickViewModal({ product, onClose }: { product: Product; onClose
         className="glass max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] p-6 md:p-8"
       >
         <motion.div className="grid gap-8 md:grid-cols-2">
-          {product.image ? (
+          {gallery ? (
+            <ProductGalleryImage
+              images={gallery}
+              labels={
+                product.slug === 'men-cockroach-janta-party' ? ['Front', 'Back'] : undefined
+              }
+              alt={product.title}
+              surface={product.surface}
+              detail
+              className="rounded-2xl"
+            />
+          ) : product.image ? (
             <div
               className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl"
               style={{ backgroundColor: product.surface || '#f4f4f4' }}

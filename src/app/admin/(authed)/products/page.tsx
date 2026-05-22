@@ -3,16 +3,19 @@
 import { useMemo, useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
-import { Plus, Search, Pencil, Trash2, X, Upload, Shirt, RotateCcw } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, X, Shirt, RotateCcw } from 'lucide-react'
 import { AdminPageHeader, Card, EmptyState, StatusBadge } from '@/components/admin/AdminUI'
 import { useAdminStore, type AdminProduct } from '@/store/useAdminStore'
 import { reseedAdminStore } from '@/store/adminSeed'
+import { AdminProductImages } from '@/components/admin/AdminProductImages'
+import { buildProductImageFields, productImagesFromAdmin } from '@/lib/adminProductImages'
 
 const CATEGORIES = ['All', 'Men T-Shirts', 'Women T-Shirts', 'Couple T-Shirts'] as const
 
 export default function ProductsPage() {
   const products = useAdminStore((s) => s.products)
   const deleteProduct = useAdminStore((s) => s.deleteProduct)
+  const updateProduct = useAdminStore((s) => s.updateProduct)
 
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => setHydrated(true), [])
@@ -38,7 +41,7 @@ export default function ProductsPage() {
     <div>
       <AdminPageHeader
         title="Products"
-        subtitle="Manage your t-shirt catalog — add, edit and track stock. Changes reflect on the storefront."
+        subtitle="Manage your t-shirt catalog. Published products show on the shop (same browser). Check “Published on shop” when saving."
         action={
           <div className="flex gap-2">
             <button
@@ -108,7 +111,9 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((p, i) => (
+                {items.map((p, i) => {
+                  const thumbs = productImagesFromAdmin(p)
+                  return (
                   <motion.tr
                     key={p.id}
                     initial={{ opacity: 0, y: 6 }}
@@ -119,13 +124,19 @@ export default function ProductsPage() {
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-3">
                         <div
-                          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg"
+                          className="flex h-14 shrink-0 gap-0.5 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10"
                           style={{ background: p.surface || '#f4f4f4' }}
                         >
-                          {p.image ? (
-                            <Image src={p.image} alt={p.title} fill className="object-contain p-1" />
+                          {thumbs.length > 0 ? (
+                            thumbs
+                              .slice(0, 3)
+                              .map((src, idx) => (
+                                <div key={idx} className="relative h-14 w-12">
+                                  <Image src={src} alt="" fill className="object-contain p-0.5" />
+                                </div>
+                              ))
                           ) : (
-                            <div className="grid h-full w-full place-items-center text-slate-300">
+                            <div className="grid h-14 w-14 place-items-center text-slate-300">
                               <Shirt className="h-5 w-5" />
                             </div>
                           )}
@@ -141,7 +152,18 @@ export default function ProductsPage() {
                     <td className="py-3 pr-3">{p.stock ?? '—'}</td>
                     <td className="py-3 pr-3 text-xs">{p.sizes.join(', ')}</td>
                     <td className="py-3 pr-3">
-                      <StatusBadge status={p.featured ? 'active' : 'draft'} />
+                      <div className="flex flex-col gap-1.5">
+                        <StatusBadge status={p.active === false ? 'draft' : 'published'} />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateProduct(p.id, { active: p.active === false ? true : false })
+                          }
+                          className="text-left text-[10px] font-bold text-brand hover:underline"
+                        >
+                          {p.active === false ? 'Publish' : 'Set draft'}
+                        </button>
+                      </div>
                     </td>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-1">
@@ -164,7 +186,7 @@ export default function ProductsPage() {
                       </div>
                     </td>
                   </motion.tr>
-                ))}
+                )})}
               </tbody>
             </table>
           ) : (
@@ -178,6 +200,7 @@ export default function ProductsPage() {
 
       {creating || editing ? (
         <ProductForm
+          key={editing?.id ?? 'create'}
           product={editing}
           onClose={() => {
             setCreating(false)
@@ -209,55 +232,65 @@ function ProductForm({
   const [colors, setColors] = useState(product?.colors?.join(', ') ?? '')
   const [tags, setTags] = useState(product?.tags?.join(', ') ?? '')
   const [description, setDescription] = useState(product?.description ?? '')
-  const [image, setImage] = useState(product?.image ?? '')
+  const [images, setImages] = useState<string[]>(
+    product ? productImagesFromAdmin(product) : [],
+  )
   const [surface, setSurface] = useState(product?.surface ?? '#f4f4f4')
   const [featured, setFeatured] = useState(product?.featured ?? false)
+  const [active, setActive] = useState(product?.active !== false)
+  const [saveError, setSaveError] = useState('')
 
   function autoSlug(t: string) {
     return t.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!title.trim() || !price) return
-    const payload = {
-      title: title.trim(),
-      slug: slug.trim() || autoSlug(title),
-      description: description.trim(),
-      category,
-      price: Number(price),
-      compareAt: compareAt ? Number(compareAt) : undefined,
-      stock: stock ? Number(stock) : undefined,
-      sizes: sizes.split(',').map((x) => x.trim()).filter(Boolean),
-      colors: colors.split(',').map((x) => x.trim()).filter(Boolean),
-      tags: tags.split(',').map((x) => x.trim()).filter(Boolean),
-      image: image.trim() || undefined,
-      surface: surface.trim() || undefined,
-      featured,
-    }
-    if (product) updateProduct(product.id, payload)
-    else addProduct(payload)
-    onClose()
-  }
+  function handleSubmit(e?: React.SyntheticEvent) {
+    e?.preventDefault()
+    setSaveError('')
 
-  async function handleFile(file: File) {
-    // Cloudinary upload uses NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME + unsigned preset.
-    const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
-    if (!cloud) {
-      // Fallback: store as base64 data URL (offline mode).
-      const reader = new FileReader()
-      reader.onload = () => setImage(String(reader.result))
-      reader.readAsDataURL(file)
+    if (!title.trim()) {
+      setSaveError('Title is required.')
       return
     }
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('upload_preset', 'aasha_unsigned')
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, {
-      method: 'POST',
-      body: fd,
-    }).then((r) => r.json())
-    if (res.secure_url) setImage(res.secure_url)
+    const priceNum = Number(price)
+    if (price === '' || Number.isNaN(priceNum) || priceNum < 0) {
+      setSaveError('Enter a valid price (₹).')
+      return
+    }
+    const sizeList = sizes.split(',').map((x) => x.trim()).filter(Boolean)
+    if (sizeList.length === 0) {
+      setSaveError('Add at least one size (e.g. S, M, L, XL).')
+      return
+    }
+
+    try {
+      const payload = {
+        title: title.trim(),
+        slug: slug.trim() || autoSlug(title),
+        description: description.trim(),
+        category,
+        price: priceNum,
+        compareAt: compareAt ? Number(compareAt) : undefined,
+        stock: stock ? Number(stock) : undefined,
+        sizes: sizeList,
+        colors: colors.split(',').map((x) => x.trim()).filter(Boolean),
+        tags: tags.split(',').map((x) => x.trim()).filter(Boolean),
+        ...buildProductImageFields(images),
+        surface: surface.trim() || undefined,
+        featured,
+        active,
+      }
+      if (product) updateProduct(product.id, payload)
+      else addProduct(payload)
+      onClose()
+    } catch (err) {
+      console.error('product save failed', err)
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : 'Save failed — try fewer/smaller images or use image URLs.',
+      )
+    }
   }
 
   const cls =
@@ -269,6 +302,7 @@ function ProductForm({
         initial={{ opacity: 0, y: 16, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
         className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900"
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-white/10">
@@ -373,38 +407,7 @@ function ProductForm({
             />
           </div>
 
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Product image</label>
-            <div className="mt-2 flex items-center gap-3">
-              {image ? (
-                <div
-                  className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl"
-                  style={{ background: surface }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={image} alt="" className="h-full w-full object-contain p-1" />
-                </div>
-              ) : null}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-3 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:border-white/15 dark:hover:bg-white/[0.02]">
-                <Upload className="h-3.5 w-3.5" /> Upload image
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (f) void handleFile(f)
-                  }}
-                />
-              </label>
-              <input
-                className={`${cls} mt-0 flex-1`}
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="…or paste image URL"
-              />
-            </div>
-          </div>
+          <AdminProductImages images={images} onChange={setImages} surface={surface} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -423,28 +426,48 @@ function ProductForm({
                 />
               </div>
             </div>
-            <label className="flex items-center gap-2 self-end text-sm">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+              />
+              <span>
+                <strong>Published</strong> on shop (uncheck = draft, hidden from customers)
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={featured}
                 onChange={(e) => setFeatured(e.target.checked)}
               />
-              Mark as featured (shows in “Trending”)
+              Featured (Trending section)
             </label>
           </div>
+
+          {saveError ? (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/40 dark:text-rose-300">
+              {saveError}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-white/10">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold dark:border-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-brand px-4 py-2 text-xs font-bold text-white"
+            >
+              {product ? 'Save changes' : 'Create product'}
+            </button>
+          </div>
         </form>
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-white/10">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold dark:border-white/10"
-          >
-            Cancel
-          </button>
-          <button onClick={handleSubmit} type="button" className="rounded-xl bg-brand px-4 py-2 text-xs font-bold text-white">
-            {product ? 'Save changes' : 'Create product'}
-          </button>
-        </div>
       </motion.div>
     </div>
   )

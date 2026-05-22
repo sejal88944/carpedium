@@ -88,7 +88,7 @@ export function Navbar() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="border-t border-black/5 bg-white/95 shadow-xl backdrop-blur-xl lg:hidden dark:border-white/10 dark:bg-void/95"
+            className="max-h-[min(70dvh,480px)] overflow-y-auto overscroll-contain border-t border-black/5 bg-white/95 shadow-xl backdrop-blur-xl lg:hidden dark:border-white/10 dark:bg-void/95"
           >
             <nav className="flex flex-col gap-2 p-4">
               {LINKS.map((l) => (

@@ -1,8 +1,12 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { COMPANY } from '@/data/brand'
 
 export function FloatingCTA() {
+  const pathname = usePathname() || ''
+  if (pathname.startsWith('/design')) return null
+
   return (
     <>
       <div className="fixed bottom-6 right-4 z-50 hidden flex-col gap-3 sm:right-6 md:flex">

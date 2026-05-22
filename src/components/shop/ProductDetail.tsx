@@ -5,13 +5,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { useStorefrontProducts } from '@/store/adminSeed'
+import { useStorefrontCatalogReady, useStorefrontProducts } from '@/store/adminSeed'
 import { COMPANY, TEE_COLORS } from '@/data/brand'
 import { PlainTeeMockup } from '@/components/tee/PlainTeeMockup'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { useCart } from '@/store/useCart'
 import { useAdminStore } from '@/store/useAdminStore'
 import { openWhatsAppOrder } from '@/lib/whatsappOrder'
+import { ProductGalleryImage } from './ProductGalleryImage'
+import { productGalleryImages } from '@/lib/productGallery'
 
 const TABS = ['Description', 'Printing', 'Reviews'] as const
 
@@ -33,6 +35,7 @@ function productRating(slug: string) {
 
 export function ProductDetail({ slug }: { slug: string }) {
   const router = useRouter()
+  const catalogReady = useStorefrontCatalogReady()
   const catalog = useStorefrontProducts()
   const product = useMemo(() => catalog.find((p) => p.slug === slug), [catalog, slug])
   const { add, addRecentlyViewed, toggleWishlist, wishlist } = useCart()
@@ -90,7 +93,29 @@ export function ProductDetail({ slug }: { slug: string }) {
     return [...same, ...rest].slice(0, 4)
   }, [catalog, product, slug])
 
-  if (!product) return null
+  if (!catalogReady) {
+    return (
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-12 text-center dark:border-white/10 dark:bg-white/5">
+        <p className="text-sm text-slate-500">Loading product…</p>
+      </div>
+    )
+  }
+
+  if (!product) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center dark:border-white/15">
+        <p className="font-display text-xl font-bold">Product not found</p>
+        <p className="mt-2 text-sm text-slate-500">
+          Check the slug or add / publish the product in Admin → Products.
+        </p>
+        <Link href="/shop" className="mt-6 inline-block text-sm font-bold text-brand">
+          ← Back to shop
+        </Link>
+      </div>
+    )
+  }
+
+  const gallery = productGalleryImages(product)
 
   const cartPayload = {
     slug: product.slug,
@@ -138,7 +163,18 @@ export function ProductDetail({ slug }: { slug: string }) {
           animate={{ opacity: 1, x: 0 }}
           className="glass overflow-hidden rounded-[2rem]"
         >
-          {product.image ? (
+          {gallery ? (
+            <ProductGalleryImage
+              images={gallery}
+              labels={
+                product.slug === 'men-cockroach-janta-party' ? ['Front', 'Back'] : undefined
+              }
+              alt={product.title}
+              surface={product.surface}
+              detail
+              className="rounded-t-[2rem]"
+            />
+          ) : product.image ? (
             <div
               className="relative aspect-[4/5] w-full overflow-hidden rounded-t-[2rem]"
               style={{ backgroundColor: product.surface || '#f4f4f4' }}
